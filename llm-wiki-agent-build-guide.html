@@ -1,0 +1,1129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LLM Wiki Agent · 从最小闭环到完整系统的构建手册</title>
+  <style>
+    :root {
+      --bg:      #f6f8fa;
+      --surface: #ffffff;
+      --fg:      #1f2328;
+      --muted:   #59636e;
+      --border:  #d0d7de;
+      --accent:  #0969da;
+
+      --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+      --fs-h1: clamp(40px, 5.6vw, 68px);
+      --fs-h2: clamp(30px, 3.8vw, 44px);
+      --fs-h3: 21px;
+      --fs-lead: 19px;
+      --fs-body: 16px;
+      --fs-meta: 13px;
+
+      --gap-xs: 8px;
+      --gap-sm: 12px;
+      --gap-md: 20px;
+      --gap-lg: 32px;
+      --gap-xl: 56px;
+      --gap-2xl: 96px;
+      --container: 1120px;
+      --gutter: 32px;
+
+      --radius: 10px;
+      --radius-lg: 16px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: var(--fs-body);
+      line-height: 1.55;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    img, svg { display: block; max-width: 100%; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    p { text-wrap: pretty; }
+    h1, h2, h3, h4 { text-wrap: balance; }
+
+    .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+    .section { padding-block: clamp(48px, 8vw, var(--gap-2xl)); }
+    .section + .section { border-top: 1px solid var(--border); }
+    .stack { display: flex; flex-direction: column; }
+    .stack > * + * { margin-top: var(--gap-md); }
+    .row { display: flex; align-items: center; gap: var(--gap-md); }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-lg); }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-lg); }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap-md); }
+    .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: var(--gap-xl); align-items: start; }
+    .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: var(--gap-xl); align-items: start; }
+
+    .h1, h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.05; letter-spacing: -0.02em; margin: 0; }
+    .h2, h2 { font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1.12; letter-spacing: -0.015em; margin: 0; }
+    .h3, h3 { font-size: var(--fs-h3); font-weight: 600; line-height: 1.3; letter-spacing: -0.005em; margin: 0; }
+    .lead { font-size: var(--fs-lead); line-height: 1.55; color: var(--muted); max-width: 60ch; margin: 0; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 var(--gap-md);
+    }
+    .meta { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
+    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    .topnav {
+      position: sticky; top: 0; z-index: 10;
+      background: color-mix(in oklch, var(--bg) 92%, transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .topnav-inner { display: flex; align-items: center; justify-content: space-between; padding-block: 14px; }
+    .topnav .logo { font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+    .topnav nav { display: flex; gap: var(--gap-lg); }
+    .topnav nav a { font-size: 14px; color: var(--muted); }
+    .topnav nav a:hover { color: var(--fg); }
+    .pagefoot { padding-block: var(--gap-xl); color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+    .pagefoot .row-between { flex-wrap: wrap; gap: var(--gap-md); }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 20px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      transition: transform 0.05s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--accent) 86%, black); }
+    .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--fg); }
+    .btn-ghost { background: transparent; color: var(--fg); border-color: transparent; padding-inline: 8px; }
+    .btn-ghost:hover { color: var(--accent); }
+    .btn-arrow::after { content: '→'; transition: transform 0.15s ease; }
+    .btn-arrow:hover::after { transform: translateX(2px); }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; }
+    .card-flat { background: transparent; border: 0; padding: 0; }
+    .card-rule { background: transparent; border: 0; border-top: 1px solid var(--fg); padding: 24px 0 0; border-radius: 0; }
+
+    .feature .feature-mark {
+      width: 36px; height: 36px;
+      display: grid; place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--muted);
+      margin-bottom: var(--gap-md);
+    }
+    .feature .feature-mark svg { width: 18px; height: 18px; }
+    .feature h3 { margin-bottom: 6px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      background: var(--fg-soft);
+      color: var(--fg);
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .tag {
+      display: inline-flex; align-items: center;
+      padding: 4px 10px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+    }
+    .tag:hover { border-color: var(--fg); color: var(--fg); }
+
+    .rule { border: 0; border-top: 1px solid var(--border); margin: 0; }
+    .rule-strong { border: 0; border-top: 1px solid var(--fg); margin: 0; }
+
+    .hero { padding-block: clamp(72px, 11vw, 150px); }
+    .hero-center { text-align: center; max-width: 760px; margin-inline: auto; }
+    .hero h1 { margin-bottom: var(--gap-md); }
+    .hero .lead { margin-bottom: var(--gap-lg); }
+    .hero-cta { display: inline-flex; gap: var(--gap-sm); flex-wrap: wrap; }
+    .hero-center .hero-cta { justify-content: center; }
+    .hero-split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-2xl); align-items: center; }
+
+    /* inline code + code block */
+    code { font-family: var(--font-mono); font-size: 0.85em; background: var(--fg-soft); padding: 2px 6px; border-radius: 6px; }
+    pre.code {
+      margin: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px 22px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--fg);
+    }
+    pre.code code { background: none; padding: 0; font-size: inherit; }
+    pre.code .cmt { color: var(--muted); }
+
+    /* architecture diagram */
+    .arch { display: grid; gap: 10px; }
+    .arch-row { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+    .arch-node { flex: 1 1 0; min-width: 118px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; }
+    .arch-node .k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 4px; }
+    .arch-node .v { font-size: 14px; line-height: 1.4; }
+    .arch-arrow { text-align: center; color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+    .arch-note { border-style: dashed; background: transparent; }
+
+    /* numbered steps */
+    .steps { display: grid; gap: var(--gap-lg); }
+    .step { display: grid; grid-template-columns: 40px 1fr; gap: var(--gap-md); align-items: start; }
+    .step-n { font-family: var(--font-mono); font-size: 13px; color: var(--muted); border: 1px solid var(--border); border-radius: 50%; width: 32px; height: 32px; display: grid; place-items: center; }
+    .step h3 { margin-bottom: 6px; }
+    .step p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    .ticks { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+    .ticks li { position: relative; padding-left: 22px; color: var(--muted); font-size: 15px; }
+    .ticks li::before { content: '—'; position: absolute; left: 0; color: var(--muted); font-family: var(--font-mono); }
+    .ticks strong { color: var(--fg); font-weight: 600; }
+
+    .rule-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: var(--gap-lg); }
+
+    /* milestone build blocks */
+    .milestone { padding-top: var(--gap-xl); border-top: 2px solid var(--fg); }
+    .milestone + .milestone { margin-top: var(--gap-xl); }
+    .milestone-head { display: flex; align-items: flex-start; gap: var(--gap-md); margin-bottom: var(--gap-lg); }
+    .milestone-n {
+      flex: none;
+      font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+      letter-spacing: .06em; color: var(--surface); background: var(--fg);
+      border-radius: 8px; padding: 7px 10px;
+    }
+    .milestone-head .hm { flex: 1; min-width: 0; }
+    .milestone-head h3 { font-size: 24px; margin-bottom: 6px; }
+    .milestone-head .pill { margin-top: 4px; }
+    .milestone .code-block { margin-top: var(--gap-lg); }
+    .milestone .code-block + .code-block { margin-top: var(--gap-lg); }
+
+    @media (max-width: 920px) {
+      .grid-2, .grid-3, .grid-4, .grid-2-1, .grid-1-2, .hero-split { grid-template-columns: 1fr; }
+      .topnav nav { display: none; }
+      .milestone-head { flex-wrap: wrap; }
+      .milestone-head .pill { order: 3; }
+      .step { grid-template-columns: 32px 1fr; gap: var(--gap-sm); }
+      .grid-2.arch-pair { gap: var(--gap-xl); }
+    }
+  </style>
+</head>
+<body>
+  <header class="topnav" data-od-id="topnav">
+    <div class="container topnav-inner">
+      <span class="logo">LLM Wiki Agent · 构建手册</span>
+      <nav>
+        <a href="#mental-model">心智模型</a>
+        <a href="#architecture">架构</a>
+        <a href="#m0">最小实现</a>
+        <a href="#milestones">逐步实现</a>
+        <a href="#reading-order">阅读顺序</a>
+      </nav>
+      <a class="btn btn-ghost btn-arrow" href="https://github.com/SamurAIGPT/llm-wiki-agent" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </header>
+
+  <main id="content">
+    <section class="section hero" data-od-id="hero">
+      <div class="container hero-center">
+        <p class="eyebrow">LEARNING PATH · 基于 MIT 开源项目</p>
+        <h1>从最小闭环到完整系统，亲手造一个 LLM Wiki Agent</h1>
+        <p class="lead">以 SamurAIGPT/llm-wiki-agent 为蓝本：先让 <code>raw/</code> 里的一个文档编译成 <code>wiki/</code> 页面并能问答，再逐个加上图谱、巡检、自愈与自动化——8 个里程碑，每一步都给出功能、做法与代码。</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#m0">从 M0 开始</a>
+          <a class="btn btn-secondary" href="#milestones">查看完整路线</a>
+        </div>
+        <div class="toc">
+          <a class="tag" href="#mental-model">1 · 心智模型</a>
+          <a class="tag" href="#architecture">2 · 架构与数据流</a>
+          <a class="tag" href="#m0">3 · 最小实现 M0</a>
+          <a class="tag" href="#milestones">4 · M1–M7 逐步实现</a>
+          <a class="tag" href="#reading-order">5 · 阅读顺序</a>
+          <a class="tag" href="#design-notes">6 · 亮点与坑</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="mental-model" data-od-id="mental-model">
+      <div class="container stack" style="gap: 56px;">
+        <div style="max-width: 46ch;">
+          <p class="eyebrow">先建立心智模型</p>
+          <h2>三个与 RAG 相反的判断，决定了整个架构</h2>
+          <p class="lead" style="margin-top: 16px;">不先理解这三点，你会照着 RAG 的直觉写，然后处处别扭。</p>
+        </div>
+        <div class="grid-3">
+          <div class="feature card-flat" data-od-id="feature-compile">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M8 7h7M8 10.5h5"/></svg>
+            </div>
+            <h3>编译一次，持续维护</h3>
+            <p>知识在导入时就被 LLM 编译进 <code>wiki/</code>，之后只做增量维护；查询只是读取。RAG 相反——每次提问都重新检索，知识永不沉淀。</p>
+          </div>
+          <div class="feature card-flat" data-od-id="feature-schema">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 4 4 12l5 8M15 4l5 8-5 8"/></svg>
+            </div>
+            <h3>Schema 即程序</h3>
+            <p><code>CLAUDE.md</code> / <code>AGENTS.md</code> / <code>GEMINI.md</code> 同时是给智能体的指令、页面格式定义，以及被脚本读取的常量（<code>SCHEMA_FILE</code>）。一份文件，三处复用。</p>
+          </div>
+          <div class="feature card-flat" data-od-id="feature-filesystem">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </div>
+            <h3>文件系统即数据库</h3>
+            <p><code>raw/</code> 只读、<code>wiki/</code> 由 Agent 独占写入、<code>graph/</code> 可随时重建。没有数据库、没有服务、没有消息队列，一切皆 Markdown + YAML frontmatter。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="architecture" data-od-id="architecture">
+      <div class="container stack" style="gap: 48px;">
+        <div style="max-width: 48ch;">
+          <p class="eyebrow">Architecture · 架构与数据流</p>
+          <h2>四个目录、一列脚本，构成一条完整链路</h2>
+        </div>
+        <div class="grid-2 arch-pair">
+          <div class="stack">
+            <p class="rule-label">目录结构 · 职责即边界</p>
+            <pre class="code"><code>llm-wiki-agent/
+├── CLAUDE.md          <span class="cmt"># Schema = 程序本体</span>
+├── raw/               <span class="cmt"># 不可变源文档（输入）</span>
+├── wiki/              <span class="cmt"># 生成的知识层</span>
+│   ├── index.md       <span class="cmt"># 页面清单（检索入口）</span>
+│   ├── overview.md    <span class="cmt"># 全局综述</span>
+│   ├── log.md         <span class="cmt"># 变更日志</span>
+│   ├── sources/       <span class="cmt"># 每篇源文档一条目</span>
+│   ├── entities/      <span class="cmt"># 实体页（人/组织/产品）</span>
+│   ├── concepts/      <span class="cmt"># 概念页</span>
+│   └── syntheses/     <span class="cmt"># 查询沉淀的综述</span>
+├── graph/             <span class="cmt"># 派生：graph.json / graph.html</span>
+└── tools/             <span class="cmt"># 可选 Python 脚本</span>
+    ├── _utils.py      <span class="cmt"># 共享底座：IO/LLM/哈希</span>
+    ├── ingest.py      <span class="cmt"># 写入主链路</span>
+    ├── query.py       <span class="cmt"># 读取与合成</span>
+    ├── health.py      <span class="cmt"># 零 LLM 结构体检</span>
+    ├── lint.py        <span class="cmt"># 语义质检</span>
+    ├── build_graph.py <span class="cmt"># 两遍式图谱</span>
+    ├── heal.py        <span class="cmt"># 自动补页</span>
+    └── refresh.py     <span class="cmt"># 增量重编译</span></code></pre>
+            <p class="meta">依赖方向是单向的：所有工具 → <code>_utils.py</code>；<code>wiki/</code> 只由 Agent / ingest 写入。</p>
+          </div>
+
+          <div class="stack">
+            <p class="rule-label">数据流 · 写入与读取</p>
+            <div class="arch">
+              <div class="arch-row">
+                <div class="arch-node">
+                  <span class="k">Input</span>
+                  <span class="v">raw/ · 不可变源文档</span>
+                </div>
+              </div>
+              <div class="arch-arrow">↓ 读源 + Schema + 现有索引</div>
+              <div class="arch-row">
+                <div class="arch-node">
+                  <span class="k">Compile</span>
+                  <span class="v">tools/ingest.py · 一次结构化 LLM 调用返回 JSON</span>
+                </div>
+              </div>
+              <div class="arch-arrow">↓ 落盘 + 更新索引</div>
+              <div class="arch-row">
+                <div class="arch-node"><span class="k">wiki/</span><span class="v">sources · entities · concepts</span></div>
+              </div>
+              <div class="arch-row">
+                <div class="arch-node"><span class="k">wiki/</span><span class="v">index · overview · log</span></div>
+              </div>
+              <div class="arch-arrow">↓ 读取时：索引匹配 + 图谱扩展（≤15 页）</div>
+              <div class="arch-row">
+                <div class="arch-node">
+                  <span class="k">Query</span>
+                  <span class="v">tools/query.py · 带 [[wikilink]] 引用合成答案</span>
+                </div>
+              </div>
+              <div class="arch-arrow">旁路 · 不阻塞主链路</div>
+              <div class="arch-row">
+                <div class="arch-node arch-note"><span class="k">Derive</span><span class="v">build_graph.py → graph.json / graph.html</span></div>
+                <div class="arch-node arch-note"><span class="k">Inspect</span><span class="v">health.py (零 LLM) / lint.py (语义)</span></div>
+              </div>
+            </div>
+            <p class="meta">外部依赖只有一个：litellm 对接的任意 LLM 端点；无数据库、无服务器。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="m0" data-od-id="m0">
+      <div class="container stack" style="gap: 48px;">
+        <div style="max-width: 52ch;">
+          <p class="eyebrow">Minimal Viable · M0</p>
+          <h2>先跑通一次 ingest → query，别碰图谱</h2>
+          <p class="lead" style="margin-top: 16px;">第一个里程碑只需要三个脚本和一个共享底座。目标不是功能完整，而是亲眼看到「文档进去，知识出来」这条主链路。</p>
+        </div>
+
+        <div class="grid-1-2">
+          <div class="stack">
+            <div class="steps">
+              <div class="step">
+                <span class="step-n">1</span>
+                <div><h3>建目录</h3><p><code>raw/</code> 与 <code>wiki/{sources,entities,concepts}</code>，再加一个空的 <code>index.md</code>、<code>log.md</code>。</p></div>
+              </div>
+              <div class="step">
+                <span class="step-n">2</span>
+                <div><h3>写最小的 Schema</h3><p>用 <code>CLAUDE.md</code> 约定页面格式：路径规则、frontmatter 字段、正文必须用 <code>[[wikilink]]</code> 互链。</p></div>
+              </div>
+              <div class="step">
+                <span class="step-n">3</span>
+                <div><h3>写共享底座</h3><p><code>tools/_utils.py</code>：路径常量、<code>call_llm</code>、<code>sha256</code>、<code>extract_wikilinks</code>。后面所有脚本都依赖它。</p></div>
+              </div>
+              <div class="step">
+                <span class="step-n">4</span>
+                <div><h3>写写入链路</h3><p><code>tools/ingest.py</code>：读源文档 → 一次 LLM 调用 → 解析 JSON → 写页面 → 更新 <code>index.md</code> / <code>log.md</code>。</p></div>
+              </div>
+              <div class="step">
+                <span class="step-n">5</span>
+                <div><h3>写读取链路</h3><p><code>tools/query.py</code>：读 <code>index.md</code> → 关键词匹配相关页 → 组装上下文 → LLM 合成带引用的回答。</p></div>
+              </div>
+              <div class="step">
+                <span class="step-n">6</span>
+                <div><h3>验收</h3><p>放一个 <code>.md</code> 进 <code>raw/</code>，跑 ingest 生成页面；再 query 提问，答案里能看到 <code>[[链接]]</code>。</p></div>
+              </div>
+            </div>
+            <div class="card-rule">
+              <p class="rule-label">教学用最小实现 · 非官方源码</p>
+              <p style="margin: 0; color: var(--muted); font-size: 15px;">下面的代码是为讲清架构而重写的简化版，命名与真实仓库一致，但省略了校验、缓存与错误处理。真实实现以仓库为准——这正好对应 M1 之后要补的东西。</p>
+            </div>
+          </div>
+
+          <div class="stack" style="gap: var(--gap-lg);">
+            <div>
+              <p class="rule-label">tools/_utils.py · 共享底座</p>
+              <pre class="code"><code><span class="cmt"># 所有工具的唯一依赖：路径、LLM、哈希、wikilink</span>
+import os, re, json, hashlib
+from pathlib import Path
+from litellm import completion
+
+ROOT = Path(__file__).resolve().parent.parent
+RAW_DIR, WIKI_DIR = ROOT / "raw", ROOT / "wiki"
+INDEX, LOG = WIKI_DIR / "index.md", WIKI_DIR / "log.md"
+SCHEMA_FILE = ROOT / "CLAUDE.md"
+MODEL = os.getenv("LLM_MODEL", "claude-3-5-sonnet-latest")
+
+def sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+def call_llm(system: str, user: str, model: str = MODEL) -> str:
+    resp = completion(
+        model=model,
+        messages=[{"role": "system", "content": system},
+                  {"role": "user", "content": user}],
+    )
+    return resp.choices[0].message.content
+
+WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+def extract_wikilinks(text: str) -> list[str]:
+    return WIKILINK_RE.findall(text)
+
+def write_page(rel: str, content: str) -> Path:
+    path = WIKI_DIR / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path</code></pre>
+            </div>
+            <div>
+              <p class="rule-label">tools/ingest.py · 最小写入链路</p>
+              <pre class="code"><code>import sys, json
+from tools._utils import (RAW_DIR, INDEX, SCHEMA_FILE,
+                          call_llm, write_page)
+
+PROMPT = """你在维护一个 Markdown 知识库。
+严格返回一个 JSON 对象，不要解释、不要代码围栏。
+字段：title, source_page, entity_pages[], concept_pages[], log_entry
+每个页面形如 {path, content}，content 用 [[wikilink]] 互链。"""
+
+def parse_json(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+    return json.loads(text)
+
+def main(raw_path: str) -> None:
+    raw = (RAW_DIR / raw_path).read_text(encoding="utf-8")
+    schema = SCHEMA_FILE.read_text(encoding="utf-8")
+    index = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
+    out = parse_json(call_llm(PROMPT,
+        f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}"))
+    write_page(out["source_page"]["path"], out["source_page"]["content"])
+    for p in out["entity_pages"] + out["concept_pages"]:
+        write_page(p["path"], p["content"])
+    print("ingested:", out["title"])
+
+if __name__ == "__main__":
+    main(sys.argv[1])</code></pre>
+            </div>
+            <div>
+              <p class="rule-label">tools/query.py · 最小读取链路</p>
+              <pre class="code"><code>import sys, re
+from tools._utils import INDEX, WIKI_DIR, call_llm
+
+def find_relevant_pages(question: str, index: str) -> list[str]:
+    paths = re.findall(r"\]\(([^)]+\.md)\)", index)
+    tokens = set(re.findall(r"[a-z0-9]+", question.lower()))
+    tokens |= {question[i:i + 2] for i in range(len(question) - 1)}  <span class="cmt"># CJK 2 字滑窗</span>
+    scored = []
+    for p in paths:
+        text = (WIKI_DIR / p).read_text(encoding="utf-8").lower()
+        score = sum(text.count(t) for t in tokens)
+        if score:
+            scored.append((score, p))
+    scored.sort(reverse=True)
+    return [p for _, p in scored[:15]]
+
+def main(question: str) -> None:
+    index = INDEX.read_text(encoding="utf-8")
+    pages = find_relevant_pages(question, index)
+    context = "\n\n".join((WIKI_DIR / p).read_text(encoding="utf-8") for p in pages)
+    print(call_llm(
+        "只用给定页面回答，引用时写成 [[页面名]]。",
+        f"# 上下文\n{context}\n\n# 问题\n{question}"))
+
+if __name__ == "__main__":
+    main(sys.argv[1])</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="milestones" data-od-id="milestones">
+      <div class="container stack" style="gap: 40px;">
+        <div style="max-width: 52ch;">
+          <p class="eyebrow">Milestone Roadmap · M1–M7</p>
+          <h2>逐步加功能，直到完整</h2>
+          <p class="lead" style="margin-top: 16px;">M0 已在上方完整展开。下面每个里程碑都按「实现内容与功能 / 如何实现 / 代码 / 验收」四段给出，代码均为讲清思路的教学简化版（非官方源码），命名与仓库一致。</p>
+        </div>
+
+        <div>
+          <article class="milestone" data-od-id="milestone-m1">
+            <div class="milestone-head">
+              <span class="milestone-n">M1</span>
+              <div class="hm">
+                <h3>Schema 约束与后置校验</h3>
+                <p class="meta">改动 · tools/_utils.py · tools/ingest.py</p>
+              </div>
+              <span class="pill">难度 · 中</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <p class="rule-label">实现内容与功能</p>
+                <ul class="ticks">
+                  <li>把 <code>CLAUDE.md</code> 注入 prompt，让 LLM 按固定 frontmatter 与 <code>[[wikilink]]</code> 规范输出</li>
+                  <li><strong>容错解析</strong>：自动剥离 ```json 代码围栏，再截取第一个 <code>{</code> 到最后一个 <code>}</code></li>
+                  <li><strong>写入前校验</strong>：检查断链，以及「未被 <code>index.md</code> 收录」的页面</li>
+                  <li>更新 <code>overview.md</code>，并前插一条 <code>log.md</code> 记录</li>
+                </ul>
+              </div>
+              <div>
+                <p class="rule-label">如何实现</p>
+                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">解析与校验是「防幻觉」的两道闸门：解析保证结构化，校验保证引用闭合。任何一条坏写入都会污染整个索引，所以宁可中止，也不要半成品落盘。</p>
+                <p class="rule-label">验收标准</p>
+                <p style="margin: 0; color: var(--muted); font-size: 15px;">故意让输出包含一个不存在的 <code>[[NotExist]]</code>，ingest 应报出断链并拒绝写入。</p>
+              </div>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · tools/_utils.py（追加）</p>
+              <pre class="code"><code><span class="cmt"># 容错 JSON 解析：剥离代码围栏 + 截取花括号范围</span>
+def parse_json_from_response(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("响应里找不到 JSON")
+    return json.loads(text[start:end + 1])
+
+<span class="cmt"># 日志采用「前插」：最新记录在最上方</span>
+def append_log(entry: str) -> None:
+    old = LOG.read_text(encoding="utf-8") if LOG.exists() else ""
+    LOG.write_text(f"{entry}\n\n{old}", encoding="utf-8")
+
+def today() -> str:
+    from datetime import date
+    return date.today().isoformat()</code></pre>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · tools/ingest.py（写入前校验）</p>
+              <pre class="code"><code><span class="cmt"># 断链 / 未索引一律拦下，校验通过才落盘</span>
+def validate_ingest(out: dict, index: str) -> list[str]:
+    errors = []
+    pages = [out["source_page"], *out["entity_pages"], *out["concept_pages"]]
+    titles = {Path(p["path"]).stem for p in pages}
+    titles |= {Path(m).stem for m in re.findall(r"\]\(([^)]+\.md)\)", index)}
+    for p in pages:
+        for link in extract_wikilinks(p["content"]):
+            if link not in titles:
+                errors.append(f"断链：{p['path']} → [[{link}]]")
+        if p["path"] != out["source_page"]["path"] and p["path"] not in index:
+            errors.append(f"未收录 index：{p['path']}")
+    return errors
+
+def main(raw_path: str) -> None:
+    raw = (RAW_DIR / raw_path).read_text(encoding="utf-8")
+    schema = SCHEMA_FILE.read_text(encoding="utf-8")
+    index = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
+    out = parse_json_from_response(call_llm(PROMPT,
+        f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}"))
+    if (errors := validate_ingest(out, index)):
+        print("校验失败，中止写入：")
+        for e in errors:
+            print("  -", e)
+        return
+    write_page(out["source_page"]["path"], out["source_page"]["content"])
+    for p in out["entity_pages"] + out["concept_pages"]:
+        write_page(p["path"], p["content"])
+    write_page("overview.md", out["overview_update"])
+    append_log(f"## [{today()}] ingest | {out['title']}")</code></pre>
+            </div>
+          </article>
+
+          <article class="milestone" data-od-id="milestone-m2">
+            <div class="milestone-head">
+              <span class="milestone-n">M2</span>
+              <div class="hm">
+                <h3>结构体检 health.py（零 LLM）</h3>
+                <p class="meta">改动 · 新增 tools/health.py</p>
+              </div>
+              <span class="pill">难度 · 低</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <p class="rule-label">实现内容与功能</p>
+                <ul class="ticks">
+                  <li><strong>空壳页</strong>：frontmatter 之外正文过短（限流导致的中断）</li>
+                  <li><strong>索引同步</strong>：<code>index.md</code> 条目与磁盘实际文件的双向差集</li>
+                  <li><strong>日志覆盖</strong>：存在 source 页却没有对应 <code>ingest</code> 日志</li>
+                  <li><code>--json</code> 机器可读、<code>--save</code> 存报告到 <code>wiki/health-report.md</code></li>
+                </ul>
+              </div>
+              <div>
+                <p class="rule-label">如何实现</p>
+                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">全部用文件系统遍历 + 正则完成，不调用 LLM。把它放在每次会话最前面跑：成本为零，还能避免拿空文件去喂 lint 白白烧 token。</p>
+                <p class="rule-label">验收标准</p>
+                <p style="margin: 0; color: var(--muted); font-size: 15px;"><code>python tools/health.py --json</code> 能准确列出人为制造的断链与未索引页面。</p>
+              </div>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · tools/health.py</p>
+              <pre class="code"><code><span class="cmt"># 结构完整性检查：确定性、零 LLM、可每次会话运行</span>
+import json, re, sys
+from tools._utils import WIKI_DIR, INDEX, LOG
+
+def stub_pages() -> list[str]:
+    bad = []
+    for p in WIKI_DIR.rglob("*.md"):
+        body = re.sub(r"^---.*?---", "", p.read_text(encoding="utf-8"), flags=re.S).strip()
+        if len(body) &lt; 40:                       <span class="cmt"># 除 frontmatter 外几乎没内容</span>
+            bad.append(str(p.relative_to(WIKI_DIR)))
+    return bad
+
+def index_mismatch() -> tuple[list, list]:
+    index = INDEX.read_text(encoding="utf-8")
+    listed = set(re.findall(r"\]\(([^)]+\.md)\)", index))
+    on_disk = {str(p.relative_to(WIKI_DIR)).replace("\\", "/")
+               for p in WIKI_DIR.rglob("*.md")}
+    on_disk.discard("index.md"); on_disk.discard("log.md")
+    return sorted(on_disk - listed), sorted(listed - on_disk)
+
+def log_coverage() -> list[str]:
+    log = LOG.read_text(encoding="utf-8") if LOG.exists() else ""
+    return [s for s in (p.stem for p in (WIKI_DIR / "sources").glob("*.md"))
+            if s not in log]
+
+def main(as_json: bool) -> None:
+    unindexed, missing = index_mismatch()
+    report = {"stubs": stub_pages(), "unindexed": unindexed,
+              "missing_files": missing, "untracked": log_coverage()}
+    if as_json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
+    for k, items in report.items():
+        print(f"{k}: {len(items)}")
+        for item in items:
+            print("  -", item)
+
+if __name__ == "__main__":
+    main("--json" in sys.argv)</code></pre>
+            </div>
+          </article>
+
+          <article class="milestone" data-od-id="milestone-m3">
+            <div class="milestone-head">
+              <span class="milestone-n">M3</span>
+              <div class="hm">
+                <h3>图谱 Pass1 · 解析 wikilink</h3>
+                <p class="meta">改动 · 新增 tools/build_graph.py · 产出 graph/graph.json + graph.html</p>
+              </div>
+              <span class="pill">难度 · 中</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <p class="rule-label">实现内容与功能</p>
+                <ul class="ticks">
+                  <li>遍历所有 wiki 页面，把 <code>[[Link]]</code> 解析为 <code>EXTRACTED</code> 边</li>
+                  <li>无向边去重，输出节点 / 边结构的 <code>graph.json</code></li>
+                  <li>用 vis.js 渲染一个可交互的 <code>graph.html</code></li>
+                  <li>此阶段<strong>完全不调用 LLM</strong>，只做确定性解析</li>
+                </ul>
+              </div>
+              <div>
+                <p class="rule-label">如何实现</p>
+                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">Pass1 是骨架：它足够可靠，可以每次都跑。先有确定性的图，Pass2 的推断边才只是「增益」而不是「依赖」——没有 LLM 也能得到一张可用的图。</p>
+                <p class="rule-label">验收标准</p>
+                <p style="margin: 0; color: var(--muted); font-size: 15px;">打开 <code>graph.html</code> 能看到节点与连线；删掉一个页面后重跑，断链不会生成幽灵节点。</p>
+              </div>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · tools/build_graph.py（Pass1 + 渲染）</p>
+              <pre class="code"><code>import json
+from tools._utils import WIKI_DIR, extract_wikilinks
+
+def pass1() -> tuple[dict, list]:
+    nodes, edges, seen = {}, [], set()
+    for p in WIKI_DIR.rglob("*.md"):
+        rel = str(p.relative_to(WIKI_DIR)).replace("\\", "/")
+        title = rel[:-3]                          <span class="cmt"># 去掉 .md</span>
+        nodes[title] = {"id": title, "path": rel}
+        for link in extract_wikilinks(p.read_text(encoding="utf-8")):
+            key = tuple(sorted((title, link)))    <span class="cmt"># 无向去重</span>
+            if key in seen:
+                continue
+            seen.add(key)
+            edges.append({"source": title, "target": link,
+                          "type": "EXTRACTED", "confidence": 1.0})
+    return nodes, edges
+
+HTML = """&lt;!doctype html&gt;&lt;meta charset="utf-8"&gt;
+&lt;div id="g" style="height:100vh"&gt;&lt;/div&gt;
+&lt;script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+const d = {nodes: %s, edges: %s};
+new vis.Network(document.getElementById('g'), {
+  nodes: new vis.DataSet(d.nodes.map(n =&gt; ({id:n.id, label:n.id}))),
+  edges: new vis.DataSet(d.edges.map(e =&gt; ({from:e.source, to:e.target})))
+}, {physics:{stabilization:true}});
+&lt;/script&gt;"""
+
+def render(nodes: dict, edges: list, out_dir) -> None:
+    html = HTML % (json.dumps(list(nodes.values()), ensure_ascii=False),
+                   json.dumps(edges, ensure_ascii=False))
+    (out_dir / "graph.html").write_text(html, encoding="utf-8")
+    (out_dir / "graph.json").write_text(
+        json.dumps({"nodes": list(nodes.values()), "edges": edges},
+                   ensure_ascii=False, indent=2), encoding="utf-8")</code></pre>
+              <p class="meta" style="margin-top: 12px;">注意：vis.js 从 CDN 加载，离线会白屏——这是仓库里已知的坑，建议把脚本本地化。</p>
+            </div>
+          </article>
+
+          <article class="milestone" data-od-id="milestone-m4">
+            <div class="milestone-head">
+              <span class="milestone-n">M4</span>
+              <div class="hm">
+                <h3>图谱 Pass2 + 社区发现 + 缓存</h3>
+                <p class="meta">改动 · tools/build_graph.py</p>
+              </div>
+              <span class="pill">难度 · 高</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <p class="rule-label">实现内容与功能</p>
+                <ul class="ticks">
+                  <li>用 LLM 推断隐式关系，只有 <code>confidence ≥ 0.7</code> 才采纳为 <code>INFERRED</code> 边</li>
+                  <li>NetworkX + Louvain 做社区发现，把 <code>community</code> 写回节点</li>
+                  <li><strong>SHA256 缓存</strong>：页面内容未变则跳过 LLM 调用</li>
+                  <li><strong>JSONL 检查点</strong>：中断后可断点续跑</li>
+                </ul>
+              </div>
+              <div>
+                <p class="rule-label">如何实现</p>
+                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">推断边是「钱」，缓存和断点就是省钱的开关。推断时只取每页前 2000 字符，在成本与召回之间取平衡；置信度阈值则把不确定的猜测挡在门外。</p>
+                <p class="rule-label">验收标准</p>
+                <p style="margin: 0; color: var(--muted); font-size: 15px;">首次运行调用 N 次 LLM；不改动内容再跑一次，应全部命中缓存（0 次调用）。</p>
+              </div>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · 推断边 + 阈值过滤 + 缓存</p>
+              <pre class="code"><code><span class="cmt"># Pass 2：推断隐含关系，低于阈值的猜测直接丢弃</span>
+def build_inferred_edges(nodes, cache, checkpoint) -&gt; list:
+    edges = []
+    for title, meta in nodes.items():
+        text = read_page(meta["path"])[:2000]     <span class="cmt"># 控制成本</span>
+        key = sha256(text)
+        if key in cache:                          <span class="cmt"># 命中缓存，零调用</span>
+            edges += cache[key]
+            continue
+        candidates = ", ".join(t for t in nodes if t != title)
+        raw = call_llm(PROMPT_EDGES, f"{text}\n\n候选节点：{candidates}")
+        result = parse_json_from_response(raw)
+        kept = [e for e in result["edges"] if e["confidence"] &gt;= 0.7]
+        kept = [{**e, "source": title, "type": "INFERRED"} for e in kept]
+        cache[key] = kept
+        save_checkpoint(checkpoint, key, kept)    <span class="cmt"># 追加写，崩溃可续</span>
+        edges += kept
+    return edges</code></pre>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · Louvain 社区发现 + JSONL 断点续跑</p>
+              <pre class="code"><code>import json
+import networkx as nx
+from networkx.algorithms.community import louvain_communities
+
+def communities(nodes: dict, edges: list) -&gt; int:
+    G = nx.Graph()
+    G.add_nodes_from(nodes)
+    G.add_weighted_edges_from(
+        (e["source"], e["target"], e.get("confidence", 1.0)) for e in edges)
+    comms = louvain_communities(G, seed=42)
+    for i, members in enumerate(comms):
+        for m in members:
+            nodes[m]["community"] = i
+    return len(comms)
+
+def load_checkpoint(path) -&gt; dict:
+    cache = {}
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            rec = json.loads(line)
+            cache[rec["key"]] = rec["edges"]
+    return cache
+
+def save_checkpoint(path, key: str, edges: list) -&gt; None:
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"key": key, "edges": edges},
+                           ensure_ascii=False) + "\n")</code></pre>
+            </div>
+          </article>
+
+          <article class="milestone" data-od-id="milestone-m5">
+            <div class="milestone-head">
+              <span class="milestone-n">M5</span>
+              <div class="hm">
+                <h3>Lint 语义层 + Heal 自愈</h3>
+                <p class="meta">改动 · 新增 tools/lint.py · tools/heal.py</p>
+              </div>
+              <span class="pill">难度 · 高</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <p class="rule-label">实现内容与功能</p>
+                <ul class="ticks">
+                  <li><strong>结构层</strong>：孤儿页、断链、被 ≥3 页提及却无独立页的缺失实体</li>
+                  <li><strong>语义层</strong>：采样若干页交给 LLM，找跨页矛盾、过时摘要、数据缺口</li>
+                  <li><code>heal.py</code> 为缺失实体生成页面，并从提及它的页面收集上下文</li>
+                  <li>文件名消毒 + 目录逃逸防护（<code>../../etc</code> 之类被拦下）</li>
+                </ul>
+              </div>
+              <div>
+                <p class="rule-label">如何实现</p>
+                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">把「便宜的结构检查」和「昂贵的语义检查」拆成两个脚本、两种频率：health 每次跑，lint 每 10–15 次 ingest 跑一次。heal 是唯一会「写」的质量工具，因此必须有严格的路径边界。</p>
+                <p class="rule-label">验收标准</p>
+                <p style="margin: 0; color: var(--muted); font-size: 15px;">人为制造一个被多页提及的实体，heal 能补出 <code>entities/*.md</code>；输入 <code>../../evil</code> 不会逃出 <code>wiki/</code>。</p>
+              </div>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · tools/lint.py（结构层 + 语义层）</p>
+              <pre class="code"><code><span class="cmt"># tools/lint.py —— 结构层（确定性）+ 语义层（LLM）</span>
+from collections import defaultdict
+from tools._utils import WIKI_DIR, call_llm, extract_wikilinks
+
+def structural_report() -&gt; dict:
+    inbound = defaultdict(int)
+    for p in WIKI_DIR.rglob("*.md"):
+        for link in extract_wikilinks(p.read_text(encoding="utf-8")):
+            inbound[link] += 1
+    pages = {p.stem for p in WIKI_DIR.rglob("*.md")}
+    focus = {"index", "log", "overview"}
+    return {
+        "orphans": sorted(t for t in pages
+                          if inbound[t] == 0 and t not in focus),
+        "broken": sorted(t for t in inbound if t not in pages),
+        "missing_entities": sorted(t for t, n in inbound.items()
+                                   if n &gt;= 3 and t not in pages),
+    }
+
+def semantic_review(sample: int = 20) -&gt; str:
+    pages = list(WIKI_DIR.rglob("*.md"))[:sample]
+    digest = "\n\n".join(p.read_text(encoding="utf-8")[:1500] for p in pages)
+    return call_llm("找出跨页面矛盾、过时摘要与数据缺口，输出条目清单。", digest)</code></pre>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · tools/heal.py（补页 + 路径消毒）</p>
+              <pre class="code"><code><span class="cmt"># tools/heal.py —— 为缺失实体自动补页，绝不越界写入</span>
+import re
+from pathlib import Path
+from tools._utils import WIKI_DIR, call_llm, parse_json_from_response
+
+def sanitize_filename(name: str) -&gt; str:
+    name = re.sub(r"[^\w\u4e00-\u9fff-]", "_", name).strip("._")
+    return name[:80] or "untitled"
+
+def safe_path(rel: str) -&gt; Path:
+    p = (WIKI_DIR / rel).resolve()
+    if WIKI_DIR.resolve() not in p.parents:        <span class="cmt"># 禁止目录逃逸</span>
+        raise ValueError(f"路径逃出 wiki/：{rel}")
+    return p
+
+def heal(missing: list[str]) -&gt; None:
+    for name in missing:
+        context = gather_mentions(name)            <span class="cmt"># 收集提及它的片段</span>
+        out = parse_json_from_response(call_llm(
+            "根据上下文为一个实体写简介页，含「## 概述」和「## 相关 [[链接]]」。",
+            f"实体：{name}\n上下文：{context}"))
+        rel = f"entities/{sanitize_filename(name)}.md"
+        path = safe_path(rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(out["content"], encoding="utf-8")</code></pre>
+            </div>
+          </article>
+
+          <article class="milestone" data-od-id="milestone-m6">
+            <div class="milestone-head">
+              <span class="milestone-n">M6</span>
+              <div class="hm">
+                <h3>增量刷新与多格式</h3>
+                <p class="meta">改动 · 新增 tools/refresh.py · tools/file_to_md.py · tools/pdf2md.py</p>
+              </div>
+              <span class="pill">难度 · 中</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <p class="rule-label">实现内容与功能</p>
+                <ul class="ticks">
+                  <li><code>refresh.py</code>：对 <code>raw/</code> 每个文件做 SHA256，只重编译新增 / 改动的文件</li>
+                  <li><code>file_to_md.py</code>：markitdown 批量把 PDF / DOCX / PPTX / EPUB 等转 Markdown，拒绝静默覆盖</li>
+                  <li><code>pdf2md.py</code>：arXiv / PDF 高保真转换，后端从 marker 自动降级到 pymupdf4llm</li>
+                  <li>带 <code>tqdm</code> 进度，碰撞可见</li>
+                </ul>
+              </div>
+              <div>
+                <p class="rule-label">如何实现</p>
+                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">内容级增量靠哈希而不是时间戳；多格式转换是「可重建的输入预处理」，与 wiki 写入解耦，所以转换失败也不会污染知识层。</p>
+                <p class="rule-label">验收标准</p>
+                <p style="margin: 0; color: var(--muted); font-size: 15px;">放 3 个文件连跑两次 refresh，第二次 0 次 ingest；改其中一个，只有它被重编译。</p>
+              </div>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · tools/refresh.py（内容级增量）</p>
+              <pre class="code"><code><span class="cmt"># tools/refresh.py —— 只有源文件内容变化才重编译</span>
+import json
+from tools._utils import RAW_DIR, sha256
+from tools.ingest import main as ingest
+
+STATE = RAW_DIR.parent / ".refresh-cache.json"
+
+def refresh() -&gt; None:
+    state = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {}
+    for raw in RAW_DIR.rglob("*"):
+        if raw.is_dir():
+            continue
+        digest = sha256(raw.read_text(encoding="utf-8", errors="ignore"))
+        if state.get(str(raw)) != digest:          <span class="cmt"># 新增或已变化</span>
+            ingest(raw.relative_to(RAW_DIR).as_posix())
+            state[str(raw)] = digest
+    STATE.write_text(json.dumps(state, ensure_ascii=False, indent=2),
+                     encoding="utf-8")</code></pre>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · tools/file_to_md.py + tools/pdf2md.py</p>
+              <pre class="code"><code><span class="cmt"># tools/file_to_md.py —— markitdown 批量转换，拒绝静默覆盖</span>
+from pathlib import Path
+from markitdown import MarkItDown
+from tqdm import tqdm
+
+def convert_tree(src: Path, dst: Path) -&gt; None:
+    md = MarkItDown()
+    for f in tqdm([p for p in src.rglob("*") if p.is_file()]):
+        target = (dst / f.relative_to(src)).with_suffix(".md")
+        if target.exists():
+            print("跳过（已存在）：", target)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(md.convert(str(f)).text_content, encoding="utf-8")
+
+<span class="cmt"># tools/pdf2md.py —— 高保真后端自动降级</span>
+def pdf_to_md(path: str, backend: str = "auto") -&gt; str:
+    if backend in ("auto", "marker"):
+        try:
+            from marker.converters.pdf import PdfConverter
+            return PdfConverter().convert(path).markdown
+        except ImportError:
+            pass                                   <span class="cmt"># 回退到轻量方案</span>
+    import pymupdf4llm
+    return pymupdf4llm.to_markdown(path)</code></pre>
+            </div>
+          </article>
+
+          <article class="milestone" data-od-id="milestone-m7">
+            <div class="milestone-head">
+              <span class="milestone-n">M7</span>
+              <div class="hm">
+                <h3>触发层与自动化</h3>
+                <p class="meta">改动 · .claude/commands/*.md · scripts/sync.sh · docs/automated-sync.md</p>
+              </div>
+              <span class="pill">难度 · 中</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <p class="rule-label">实现内容与功能</p>
+                <ul class="ticks">
+                  <li>把自然语言触发词包装成斜杠命令（<code>.claude/commands/*.md</code>），只做薄封装</li>
+                  <li>写一个 <code>scripts/sync.sh</code>，按 <code>health → refresh → graph</code> 顺序执行</li>
+                  <li>用 cron / launchd 定时无人值守同步</li>
+                  <li>把最近一次同步结果追加到 <code>log.md</code> 可追溯</li>
+                </ul>
+              </div>
+              <div>
+                <p class="rule-label">如何实现</p>
+                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">触发层只负责「翻译」，不承载任何逻辑；逻辑永远留在 Schema 与 <code>tools/</code> 里。这样从 Claude Code 换到 Codex 或 Gemini CLI，命令层几乎不用改。</p>
+                <p class="rule-label">验收标准</p>
+                <p style="margin: 0; color: var(--muted); font-size: 15px;">配置 cron 后无人值守跑完一轮，<code>log.md</code> 出现新的 ingest 条目。</p>
+              </div>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · .claude/commands/wiki-ingest.md（薄封装）</p>
+              <pre class="code"><code>---
+description: 将一个源文档导入 wiki
+---
+读取 `CLAUDE.md` 中的 Ingest 工作流，导入：$ARGUMENTS
+导入完成后运行 `python tools/health.py` 校验结构。</code></pre>
+            </div>
+            <div class="code-block">
+              <p class="rule-label">代码 · scripts/sync.sh + crontab</p>
+              <pre class="code"><code><span class="cmt">#!/usr/bin/env bash</span>
+<span class="cmt"># scripts/sync.sh —— 无人值守：先体检，再增量导入，最后出图</span>
+set -euo pipefail
+python tools/health.py --json
+python tools/refresh.py
+python tools/build_graph.py --report</code></pre>
+              <pre class="code" style="margin-top: 12px;"><code><span class="cmt"># crontab —— 每天 09:00 同步一次</span>
+0 9 * * * cd /path/to/llm-wiki-agent &amp;&amp; scripts/sync.sh &gt;&gt; .sync.log 2&gt;&amp;1</code></pre>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="reading-order" data-od-id="reading-order">
+      <div class="container stack" style="gap: 48px;">
+        <div style="max-width: 48ch;">
+          <p class="eyebrow">Reading Order</p>
+          <h2>关键文件的阅读顺序：三遍走完</h2>
+          <p class="lead" style="margin-top: 16px;">不要从最大的文件开始。先建立心智模型，再走通主链路，最后才深入图谱。</p>
+        </div>
+        <div class="grid-3">
+          <div class="card" data-od-id="pass-1">
+            <p class="pill">第一遍 · 1–2h</p>
+            <h3 style="margin: 18px 0 10px;">建立心智模型</h3>
+            <ul class="ticks">
+              <li><strong>CLAUDE.md</strong> —— 系统的「源代码」：页面格式与 ingest / query / lint / health / graph 五套工作流全在这里。</li>
+              <li><strong>tools/_utils.py</strong> —— 共享底座：路径常量、<code>call_llm</code>、<code>sha256</code>、<code>extract_wikilinks</code>。看不懂它，后面寸步难行。</li>
+            </ul>
+          </div>
+          <div class="card" data-od-id="pass-2">
+            <p class="pill">第二遍 · 3–4h</p>
+            <h3 style="margin: 18px 0 10px;">走通写入与读取</h3>
+            <ul class="ticks">
+              <li><strong>health.py</strong> —— 最简单的确定性工具，先建立「结构检查」的直觉。</li>
+              <li><strong>ingest.py</strong> —— 核心写入路径，prompt 结构、JSON 解析与 <code>validate_ingest</code> 是全项目精华。</li>
+              <li><strong>query.py</strong> —— 核心读取路径：关键词匹配 + 图谱扩展的检索策略。</li>
+            </ul>
+          </div>
+          <div class="card" data-od-id="pass-3">
+            <p class="pill">深入 · 5–8h</p>
+            <h3 style="margin: 18px 0 10px;">图谱与自愈</h3>
+            <ul class="ticks">
+              <li><strong>build_graph.py</strong> —— 最大也最关键：两遍式建边、缓存、检查点、Louvain 与 HTML 渲染。</li>
+              <li><strong>lint.py → heal.py</strong> —— 质检与自愈闭环，注意路径穿越消毒。</li>
+              <li><strong>refresh.py / file_to_md.py / pdf2md.py</strong> —— 增量与多格式转换。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="design-notes" data-od-id="design-notes">
+      <div class="container stack" style="gap: 48px;">
+        <div style="max-width: 50ch;">
+          <p class="eyebrow">Achievements &amp; Pitfalls</p>
+          <h2>设计亮点与常见的坑</h2>
+          <p class="lead" style="margin-top: 16px;">哪些是仓库里能证实的事实，哪些是学习时的推断，分开看。</p>
+        </div>
+        <div class="grid-2">
+          <div class="card-rule" data-od-id="highlights">
+            <p class="rule-label">值得学习的设计 · 事实</p>
+            <ul class="ticks">
+              <li><strong>Schema 即程序</strong>：一份 Markdown 同时充当 Agent 指令、LLM 输出 schema 与脚本常量（<code>SCHEMA_FILE</code>），耦合极低。</li>
+              <li><strong>职责切分</strong>：<code>health.py</code> 零 LLM 可高频跑，<code>lint.py</code> 才烧 token——成熟的成本意识。</li>
+              <li><strong>约束式输出 + 后置校验</strong>：强制严格 JSON 并容错剥离代码围栏，写入前再校验断链。</li>
+              <li><strong>增量与断点续跑</strong>：SHA256 缓存 + JSONL 检查点，适合大知识库。</li>
+              <li><strong>优雅降级</strong>：没有 networkx 就关闭社区发现，而不是直接崩溃。</li>
+            </ul>
+          </div>
+          <div class="card-rule" data-od-id="pitfalls">
+            <p class="rule-label">容易踩的坑 · 事实 / 推断</p>
+            <ul class="ticks">
+              <li><strong>[推断]</strong> <code>ingest.py</code> 把调试输出写死到 <code>/tmp/...</code>，Windows 上可能失败，建议先改成可配置路径。</li>
+              <li><strong>[事实]</strong> <code>graph.html</code> 从 CDN 加载 vis.js，离线会白屏，需要本地化资源。</li>
+              <li><strong>[事实]</strong> <code>log.md</code> 文档称 append-only，实现却是前插（newest-first），注意语义不一致。</li>
+              <li><strong>[事实]</strong> <code>pdf2md</code> 的 marker 后端会拉 torch 等重依赖，无 GPU 时较慢。</li>
+              <li><strong>[事实]</strong> 仓库没有测试与构建 CI，核心的 JSON 解析、wikilink 解析很适合自己补单测。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="cta-strip" data-od-id="cta-strip" style="text-align: center;">
+      <div class="container" style="max-width: 620px;">
+        <h2>Clone 下来，今天只写三个文件</h2>
+        <p class="lead" style="margin: 16px auto 32px;">别一上来就想着完整系统。先写下 <code>_utils.py</code>、<code>ingest.py</code> 和 <code>query.py</code>，让第一篇文档变成 wiki 页面并回答第一个问题——剩下的里程碑都是在这个闭环上长出来的。</p>
+        <a class="btn btn-primary" href="https://github.com/SamurAIGPT/llm-wiki-agent" target="_blank" rel="noopener">打开 GitHub 仓库</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pagefoot" data-od-id="footer">
+    <div class="container row-between">
+      <span>© 2026 · LLM Wiki Agent 构建手册</span>
+      <span class="meta">基于 SamurAIGPT/llm-wiki-agent · MIT License · 本页为学习指南，非官方文档</span>
+    </div>
+  </footer>
+</body>
+</html>
