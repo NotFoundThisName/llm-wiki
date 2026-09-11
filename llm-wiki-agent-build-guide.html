@@ -402,7 +402,7 @@
               </div>
               <div class="step">
                 <span class="step-n">3</span>
-                <div><h3>写共享底座</h3><p><code>tools/_utils.py</code>：路径常量、<code>call_llm</code>、<code>sha256</code>、<code>extract_wikilinks</code>。后面所有脚本都依赖它。</p></div>
+                <div><h3>写共享底座</h3><p><code>tools/_utils.py</code>：路径常量、<code>call_llm</code>、<code>sha256</code>、<code>extract_wikilinks</code>，以及更新索引/日志的 <code>append_index</code>、<code>append_log</code>。后面所有脚本都依赖它。</p></div>
               </div>
               <div class="step">
                 <span class="step-n">4</span>
@@ -414,7 +414,7 @@
               </div>
               <div class="step">
                 <span class="step-n">6</span>
-                <div><h3>验收</h3><p>放一个 <code>.md</code> 进 <code>raw/</code>，跑 ingest 生成页面；再 query 提问，答案里能看到 <code>[[链接]]</code>。</p></div>
+                <div><h3>验收</h3><p>放一个 <code>.md</code> 进 <code>raw/</code>，跑 ingest 生成页面并让 <code>index.md</code> 出现新条目；再 query 提问，召回非空、答案里能看到 <code>[[链接]]</code>。</p></div>
               </div>
             </div>
             <div class="card-rule">
@@ -428,6 +428,7 @@
               <p class="rule-label">tools/_utils.py · 共享底座</p>
               <pre class="code"><code><span class="cmt"># 所有工具的唯一依赖：路径、LLM、哈希、wikilink</span>
 import os, re, json, hashlib
+from datetime import datetime
 from pathlib import Path
 from litellm import completion
 
@@ -456,13 +457,53 @@ def write_page(rel: str, content: str) -> Path:
     path = WIKI_DIR / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    return path</code></pre>
+    return path
+
+<span class="cmt"># index.md 的三个分区；query.py 靠 ](path.md) 正则扫描这里召回页面</span>
+INDEX_SECTIONS = (("sources", "## Sources"),
+                  ("entities", "## Entities"),
+                  ("concepts", "## Concepts"))
+
+def append_index(entries: list[tuple[str, str, str]]) -> None:
+    <span class="cmt"># entries: [(分类, 标题, 相对路径), ...]，先解析旧内容再整体重写，天然去重</span>
+    sections = {k: [] for k, _ in INDEX_SECTIONS}
+    if INDEX.exists():
+        current = None
+        for line in INDEX.read_text(encoding="utf-8").splitlines():
+            if line.startswith("## "):
+                current = line[3:].strip().lower()
+            m = re.match(r"- \[(.+?)\]\(([^)]+\.md)\)", line)
+            if m and current in sections:
+                sections[current].append((m.group(1), m.group(2)))
+    for key, title, rel in entries:
+        if (title, rel) not in sections.setdefault(key.lower(), []):
+            sections[key.lower()].append((title, rel))
+    out = ["# 索引", ""]
+    for key, heading in INDEX_SECTIONS:
+        if sections.get(key):
+            out.append(heading)
+            out += [f"- [{t}]({r})" for t, r in sections[key]]
+            out.append("")
+    INDEX.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
+
+def append_log(entry: str) -> None:
+    <span class="cmt"># 前插：最新记录在最上方；首次写入补上 # 日志 标题</span>
+    prev = LOG.read_text(encoding="utf-8").strip() if LOG.exists() else ""
+    block = f"## {datetime.now():%Y-%m-%d %H:%M}\n{entry}"
+    if not prev:
+        LOG.write_text(f"# 日志\n\n{block}\n", encoding="utf-8")
+    elif prev.startswith("# "):
+        head, _, rest = prev.partition("\n")
+        LOG.write_text(f"{head}\n\n{block}\n\n{rest.lstrip()}\n", encoding="utf-8")
+    else:
+        LOG.write_text(f"{block}\n\n{prev}\n", encoding="utf-8")</code></pre>
             </div>
             <div>
               <p class="rule-label">tools/ingest.py · 最小写入链路</p>
               <pre class="code"><code>import sys, json
-from tools._utils import (RAW_DIR, INDEX, SCHEMA_FILE,
-                          call_llm, write_page)
+from pathlib import Path
+from tools._utils import (RAW_DIR, INDEX, SCHEMA_FILE, call_llm,
+                          write_page, append_index, append_log)
 
 PROMPT = """你在维护一个 Markdown 知识库。
 严格返回一个 JSON 对象，不要解释、不要代码围栏。
@@ -481,9 +522,18 @@ def main(raw_path: str) -> None:
     index = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
     out = parse_json(call_llm(PROMPT,
         f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}"))
+    <span class="cmt"># 写源页面，收集 (分类, 标题, 路径) 供更新索引</span>
+    written = [("sources", out["title"], out["source_page"]["path"])]
+    for p in out["entity_pages"]:
+        written.append(("entities", Path(p["path"]).stem, p["path"]))
+    for p in out["concept_pages"]:
+        written.append(("concepts", Path(p["path"]).stem, p["path"]))
     write_page(out["source_page"]["path"], out["source_page"]["content"])
     for p in out["entity_pages"] + out["concept_pages"]:
         write_page(p["path"], p["content"])
+    <span class="cmt"># 关键：不更新 index.md，query 将永远召回不到页面</span>
+    append_index(written)
+    append_log(out.get("log_entry") or f"ingest {out['title']}")
     print("ingested:", out["title"])
 
 if __name__ == "__main__":
@@ -547,8 +597,8 @@ if __name__ == "__main__":
                 <ul class="ticks">
                   <li>把 <code>CLAUDE.md</code> 注入 prompt，让 LLM 按固定 frontmatter 与 <code>[[wikilink]]</code> 规范输出</li>
                   <li><strong>容错解析</strong>：自动剥离 ```json 代码围栏，再截取第一个 <code>{</code> 到最后一个 <code>}</code></li>
-                  <li><strong>写入前校验</strong>：检查断链，以及「未被 <code>index.md</code> 收录」的页面</li>
-                  <li>更新 <code>overview.md</code>，并前插一条 <code>log.md</code> 记录</li>
+                   <li><strong>写入前校验</strong>：检查断链——所有 <code>[[链接]]</code> 必须能在「本次新页面 + <code>index.md</code> 已有页面」里找到目标</li>
+                   <li>更新 <code>overview.md</code>；<code>log.md</code> 记录已由 M0 的 <code>append_log</code> 负责</li>
                 </ul>
               </div>
               <div>
@@ -568,21 +618,12 @@ def parse_json_from_response(text: str) -> dict:
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end == -1:
         raise ValueError("响应里找不到 JSON")
-    return json.loads(text[start:end + 1])
-
-<span class="cmt"># 日志采用「前插」：最新记录在最上方</span>
-def append_log(entry: str) -> None:
-    old = LOG.read_text(encoding="utf-8") if LOG.exists() else ""
-    LOG.write_text(f"{entry}\n\n{old}", encoding="utf-8")
-
-def today() -> str:
-    from datetime import date
-    return date.today().isoformat()</code></pre>
+    return json.loads(text[start:end + 1])</code></pre>
             </div>
             <div class="code-block">
               <p class="rule-label">代码 · tools/ingest.py（写入前校验）</p>
-              <pre class="code"><code><span class="cmt"># 断链 / 未索引一律拦下，校验通过才落盘</span>
-def validate_ingest(out: dict, index: str) -> list[str]:
+              <pre class="code"><code><span class="cmt"># 写入前拦截断链：新页面标题 + index 已有标题一起作为合法目标</span>
+def validate_links(out: dict, index: str) -> list[str]:
     errors = []
     pages = [out["source_page"], *out["entity_pages"], *out["concept_pages"]]
     titles = {Path(p["path"]).stem for p in pages}
@@ -591,8 +632,6 @@ def validate_ingest(out: dict, index: str) -> list[str]:
         for link in extract_wikilinks(p["content"]):
             if link not in titles:
                 errors.append(f"断链：{p['path']} → [[{link}]]")
-        if p["path"] != out["source_page"]["path"] and p["path"] not in index:
-            errors.append(f"未收录 index：{p['path']}")
     return errors
 
 def main(raw_path: str) -> None:
@@ -601,16 +640,22 @@ def main(raw_path: str) -> None:
     index = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
     out = parse_json_from_response(call_llm(PROMPT,
         f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}"))
-    if (errors := validate_ingest(out, index)):
+    if (errors := validate_links(out, index)):
         print("校验失败，中止写入：")
         for e in errors:
             print("  -", e)
         return
+    written = [("sources", out["title"], out["source_page"]["path"])]
+    for p in out["entity_pages"]:
+        written.append(("entities", Path(p["path"]).stem, p["path"]))
+    for p in out["concept_pages"]:
+        written.append(("concepts", Path(p["path"]).stem, p["path"]))
     write_page(out["source_page"]["path"], out["source_page"]["content"])
     for p in out["entity_pages"] + out["concept_pages"]:
         write_page(p["path"], p["content"])
     write_page("overview.md", out["overview_update"])
-    append_log(f"## [{today()}] ingest | {out['title']}")</code></pre>
+    append_index(written)  <span class="cmt"># 校验通过后再更新索引与日志</span>
+    append_log(out.get("log_entry") or f"ingest {out['title']}")</code></pre>
             </div>
           </article>
 
@@ -1061,7 +1106,7 @@ python tools/build_graph.py --report</code></pre>
             <h3 style="margin: 18px 0 10px;">走通写入与读取</h3>
             <ul class="ticks">
               <li><strong>health.py</strong> —— 最简单的确定性工具，先建立「结构检查」的直觉。</li>
-              <li><strong>ingest.py</strong> —— 核心写入路径，prompt 结构、JSON 解析与 <code>validate_ingest</code> 是全项目精华。</li>
+              <li><strong>ingest.py</strong> —— 核心写入路径，prompt 结构、JSON 解析、索引更新与 <code>validate_links</code> 断链校验是全项目精华。</li>
               <li><strong>query.py</strong> —— 核心读取路径：关键词匹配 + 图谱扩展的检索策略。</li>
             </ul>
           </div>
