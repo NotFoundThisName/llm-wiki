@@ -44,7 +44,9 @@ def main(question: str) -> None:
     # 读取索引 → 词频召回相关页 → 拼接上下文 → 交给 LLM 带引用回答
     index = INDEX.read_text(encoding="utf-8")
     pages = find_relevant_pages(question, index)
+    # 把召回页面的正文拼成一段上下文，页面之间用空行分隔
     context = "\n\n".join((WIKI_DIR / p).read_text(encoding="utf-8") for p in pages)
+    # system 提示约束「只能依据给定页面回答」；此处不传 json_mode，要自由文本
     print(call_llm(
         "只用给定页面回答，引用时写成 [[页面名]]。",
         f"# 上下文\n{context}\n\n# 问题\n{question}"

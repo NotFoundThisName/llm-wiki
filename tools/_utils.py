@@ -33,7 +33,7 @@ WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 # Windows 文件名非法字符：: 会变成 NTFS 数据流，? * " < > | 会直接报「文件名语法不正确」
 INVALID_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
-# index.md 的三个分区；query.py 靠 ](path.md) 正则扫描这里召回页面
+# index.md 的四个分区（顺序即最终写入顺序）；query.py 靠 ](path.md) 正则扫描这里召回页面
 INDEX_SECTIONS = (("sources", "## Sources"),
                   ("entities", "## Entities"),
                   ("concepts", "## Concepts"),
@@ -152,9 +152,8 @@ def append_index(entrties: list[tuple[str, str, str]]) -> None:
             # 匹配形如  - [Python](wiki/python.md)
             m = re.match(r"- \[(.+?)\]\(([^)]+\.md)\)", line)
             if m and current in sections:
-                # 第一个捕获组是标题，第二个是路径
-                # Python
-                # wiki/python.md
+                # 捕获组 1 = 显示标题，捕获组 2 = 相对路径
+                # 例：- [Python](sources/python.md) → ("Python", "sources/python.md")
                 sections[current].append((m.group(1), m.group(2)))
 
     # 合并新条目：按 (标题, 路径) 去重，避免重复写入同一页
@@ -198,7 +197,15 @@ def append_log(entry: str) -> None:
         # 没有标题：直接把新条目放在最前面
         LOG.write_text(f"{block}\n\n{prev}\n", encoding="utf-8")
 
-def parse_json_from_response(text: str) ->dict:
+def parse_json_from_response(text: str) -> dict:
+    """
+    从 LLM 的原始回复文本中解析出第一个 JSON 对象，返回 dict。
+    容错点：
+    - 去掉可能包裹在外层的 ```json ... ``` 代码围栏；
+    - 用 raw_decode 只解析「第一个完整 JSON 对象」，自动忽略其后的多余内容
+      （例如模型在 JSON 后追加的解释文字或第二个对象），避免 json.loads 报 "Extra data"。
+    找不到对象或解析失败时抛 ValueError，交由上层中止流程。
+    """
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```[a-zA-Z]*\s*", "", text)   # 去开头围栏

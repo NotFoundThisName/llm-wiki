@@ -4,7 +4,6 @@
 #       → 写 sources/entities/concepts 页面 → 更新 index.md 与 log.md
 # 是整个 M0 最小闭环的写入侧。
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -19,33 +18,47 @@ PROMPT = """你在维护一个 Markdown 知识库。
 字段：title, source_page, entity_pages[], concept_pages[], overview_update, log_entry
 每个页面形如 {path, content}，content 用 [[wikilink]] 互链。"""
 
-def validate_links(out:dict,index:str)->list[str]:
+def validate_links(out: dict, index: str) -> list[str]:
     """
-    模型返回的数据中，content字段中有这种对话
-    量子纠缠是一种 [[量子力学]] 现象，最早由 [[爱因斯坦]] 等人提出质疑。
-    量子力学最新的实体页和过去的所有索引中都没有，这就会断链。
-    :param out:
-    :param index:
-    :return:
+    写入前的「断链」校验（确定性，不花 token）。
+
+    模型在页面 content 里会写 [[wikilink]]，但它引用的目标可能根本不存在，例如：
+        量子纠缠是一种 [[量子力学]] 现象，最早由 [[爱因斯坦]] 等人提出质疑。
+    如果「量子力学」既不在本次要写入的页面里，也不在历史 index 中，这条链接就是
+    断链（dead link），会污染索引，并让后续的图谱/检索出现悬空节点。
+
+    做法：先构造一份「允许被链接到的名字」白名单 titles，再逐个比对 content 里的
+    [[目标]]，不在白名单里的记为断链。白名单四路来源：
+        ① 本次源页标题          （源页文件名是 kebab，标题可能是中文，两者不同）
+        ② 每页文件名 stem       （兼容 [[x]] 写法，如 rag-basics）
+        ③ 每页 .md 全名         （兼容 [[x.md]] 写法）
+        ④ index.md 已有页面      （允许链接到以前 ingest 过的旧页：显示标题 + 路径 stem）
+
+    :param out:   模型返回并已解析的 dict（含 source_page / entity_pages / concept_pages）
+    :param index: index.md 的全文，用来收集历史已存在的页面名
+    :return: 断链信息列表；空列表表示校验通过
     """
-    # 错误列表，断链的信息存放在这里
+    # 断链信息收集处，每发现一条就 append 一条描述
     errors=[]
-    # 将现有的数据拍平，最新的页拿出来
+    # 把本批要写入的所有页面拍平成一个列表，便于统一遍历
     pages=[out["source_page"],*out["entity_pages"],*out["concept_pages"]]
-    # 将标题也放进去
+    # 白名单：允许被 [[链接]] 指向的名字集合，先放入本批源页的标题
     titles={out["title"]}
 
     for page in pages:
+        # 收集本批每个页面文件名的主体与全名，兼容 [[x]] 与 [[x.md]] 两种写法
         rel = safe_rel_path(page["path"])
         titles.add(Path(rel).stem)
         titles.add(Path(rel).name)
+    # 再并上历史 index 里已存在的页面（显示标题 + 路径 stem），允许链接旧页面
     for title,path in re.findall(r"- \[(.+?)\]\(([^)]+\.md)\)",index):
         titles.add(title)
         titles.add(Path(safe_rel_path(path)).stem)
 
+    # 逐个检查本批页面正文里的每一个 [[链接]]
     for p in pages:
         for row in extract_wikilinks(p["content"]):
-            target = row.split("|",1)[0].strip()
+            target = row.split("|",1)[0].strip()   # [[A|别名]] 只比较 A
             if target not in titles:
                 errors.append(f"断链：{p['path']} → [[{row}]]")
     return errors
