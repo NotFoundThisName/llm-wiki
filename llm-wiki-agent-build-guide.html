@@ -227,6 +227,60 @@
     .milestone .code-block { margin-top: var(--gap-lg); }
     .milestone .code-block + .code-block { margin-top: var(--gap-lg); }
 
+    /* example walkthrough modules */
+    .example {
+      margin-top: var(--gap-lg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .example-head {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 11px 20px;
+      background: var(--fg-soft);
+      border-bottom: 1px solid var(--border);
+    }
+    .example-head .lbl {
+      font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+      letter-spacing: .08em; text-transform: uppercase; color: var(--fg);
+    }
+    .example-head .flow {
+      margin-left: auto;
+      font-family: var(--font-mono); font-size: 11px;
+      letter-spacing: .04em; color: var(--muted);
+    }
+    .example-body { padding: 20px; display: grid; gap: var(--gap-md); }
+    .example-body .grid-2 { gap: var(--gap-md); }
+    .example-k {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--muted); margin: 0 0 8px;
+    }
+    .example-result { border-top: 1px dashed var(--border); padding-top: var(--gap-md); }
+    .example pre.code { font-size: 12px; padding: 14px 16px; }
+
+    /* per-stage data contract: 输入形式 → 输出形式 → 数据案例 */
+    .contract {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-top: var(--gap-lg);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .contract > div { background: var(--surface); padding: 10px 14px; }
+    .contract .ck {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted); white-space: nowrap;
+    }
+    .contract .cv { color: var(--muted); }
+    .contract .cv strong { color: var(--fg); font-weight: 600; }
+    .contract .cv code { font-size: .85em; }
+
     @media (max-width: 920px) {
       .grid-2, .grid-3, .grid-4, .grid-2-1, .grid-1-2, .hero-split { grid-template-columns: 1fr; }
       .topnav nav { display: none; }
@@ -234,6 +288,9 @@
       .milestone-head .pill { order: 3; }
       .step { grid-template-columns: 32px 1fr; gap: var(--gap-sm); }
       .grid-2.arch-pair { gap: var(--gap-xl); }
+      .contract { grid-template-columns: 1fr; }
+      .contract .ck { padding-bottom: 2px; }
+      .contract .cv { padding-top: 2px; }
     }
   </style>
 </head>
@@ -387,6 +444,14 @@
           <p class="eyebrow">Minimal Viable · M0</p>
           <h2>先跑通一次 ingest → query，别碰图谱</h2>
           <p class="lead" style="margin-top: 16px;">第一个里程碑只需要三个脚本和一个共享底座。目标不是功能完整，而是亲眼看到「文档进去，知识出来」这条主链路。</p>
+          <div class="contract" style="margin-top: 20px;">
+            <div class="ck">输入形式</div>
+            <div class="cv"><code>raw/&lt;path&gt;.md</code> → UTF-8 <strong><code>str</code></strong>；命令行参数 <code>raw_path: str</code>；<code>query</code> 的问题 → <strong><code>str</code></strong></div>
+            <div class="ck">输出形式</div>
+            <div class="cv">磁盘 <code>wiki/{sources,entities,concepts}/*.md</code> + <code>index.md</code> + <code>log.md</code>；<code>query</code> 返回带 <code>[[wikilink]]</code> 引用的答案 <strong><code>str</code></strong></div>
+            <div class="ck">数据案例</div>
+            <div class="cv"><code>raw/4-re.md</code> → 若干 <code>wiki/*.md</code> 页面、<code>index.md</code> 追加条目、<code>log.md</code> 前插一行；再提问 → 返回含 <code>[[检索增强生成]]</code> 的回答</div>
+          </div>
         </div>
 
         <div class="grid-1-2">
@@ -402,7 +467,7 @@
               </div>
               <div class="step">
                 <span class="step-n">3</span>
-                <div><h3>写共享底座</h3><p><code>tools/_utils.py</code>：路径常量、<code>call_llm</code>、<code>sha256</code>、<code>extract_wikilinks</code>，以及更新索引/日志的 <code>append_index</code>、<code>append_log</code>。后面所有脚本都依赖它。</p></div>
+                <div><h3>写共享底座</h3><p><code>tools/_utils.py</code>：路径常量、<code>safe_rel_path</code> 与 <code>write_page</code>（路径归一 + 落盘）、<code>call_llm</code>、<code>sha256</code>、<code>extract_wikilinks</code>，以及更新索引/日志的 <code>append_index</code>、<code>append_log</code>。后面所有脚本都依赖它。</p></div>
               </div>
               <div class="step">
                 <span class="step-n">4</span>
@@ -419,7 +484,7 @@
             </div>
             <div class="card-rule">
               <p class="rule-label">教学用最小实现 · 非官方源码</p>
-              <p style="margin: 0; color: var(--muted); font-size: 15px;">下面的代码是为讲清架构而重写的简化版，命名与真实仓库一致，但省略了校验、缓存与错误处理。真实实现以仓库为准——这正好对应 M1 之后要补的东西。</p>
+              <p style="margin: 0; color: var(--muted); font-size: 15px;">下面的代码是为讲清架构而重写的简化版，命名与真实仓库一致，但省略了校验、缓存与错误处理。真实实现以仓库为准——这正好对应 M1 之后要补的东西。<strong>路径统一以 <code>wiki/</code> 为根</strong>：<code>write_page</code> 剥掉模型多写的 <code>wiki/</code> 前缀，<code>index.md</code> 只存相对路径（<code>sources/x.md</code>），这样 <code>query</code>、<code>health</code> 才能用 <code>WIKI_DIR / p</code> 正确拼出磁盘路径；否则会落成 <code>wiki/wiki/…</code>。</p>
             </div>
           </div>
 
@@ -430,22 +495,39 @@
 import os, re, json, hashlib
 from datetime import datetime
 from pathlib import Path
+
+<span class="cmt"># 环境自愈：代理软件常把 "[::1]" 塞进 NO_PROXY，httpx 会把它当端口，报
+# Invalid port: ':1]'。litellm 在 import 阶段就可能联网，必须先清掉。</span>
+os.environ["NO_PROXY"] = ",".join(
+    t for t in os.environ.get("NO_PROXY", "").replace("[::1]", "").split(",") if t)
 from litellm import completion
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR, WIKI_DIR = ROOT / "raw", ROOT / "wiki"
 INDEX, LOG = WIKI_DIR / "index.md", WIKI_DIR / "log.md"
 SCHEMA_FILE = ROOT / "CLAUDE.md"
-MODEL = os.getenv("LLM_MODEL", "claude-3-5-sonnet-latest")
+MODEL = os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
 
 def sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-def call_llm(system: str, user: str, model: str = MODEL) -> str:
+def call_llm(system: str, user: str, model: str = MODEL, json_mode: bool = False) -> str:
+    <span class="cmt"># json_mode 只在需要结构化输出时开（ingest）；query 要自由文本，开了会 400。
+    # DeepSeek 需显式传 key：key 为空时 litellm 会发 Bearer 空 token → 401 governor。</span>
+    kw = {}
+    if model.startswith("deepseek"):
+        key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+        if not key:
+            raise SystemExit("DEEPSEEK_API_KEY 为空：请先在当前终端设置它。")
+        kw["api_key"] = key
+        kw["api_base"] = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
+        if json_mode:
+            kw["response_format"] = {"type": "json_object"}
     resp = completion(
         model=model,
         messages=[{"role": "system", "content": system},
                   {"role": "user", "content": user}],
+        **kw,
     )
     return resp.choices[0].message.content
 
@@ -453,8 +535,28 @@ WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 def extract_wikilinks(text: str) -> list[str]:
     return WIKILINK_RE.findall(text)
 
+<span class="cmt"># 路径归一：剥掉模型多写的 wiki/ 前缀、拦截 ..、替换 Windows 非法字符、补 .md。
+# 索引与 query 都以 WIKI_DIR 为根（如 sources/x.md），写盘前必须先归一。</span>
+_ILLEGAL = re.compile(r'[&lt;&gt;:"/\\|?*\x00-\x1f]')
+def safe_rel_path(rel: str) -> str:
+    parts = [p for p in str(rel).strip().replace("\\", "/").split("/") if p not in ("", ".")]
+    if parts and parts[0].lower() == "wiki":
+        parts = parts[1:]
+    parts = [p for p in parts if p != ".."]           <span class="cmt"># 拦目录穿越</span>
+    cleaned = [_ILLEGAL.sub("-", p).strip().rstrip(".") for p in parts]
+    cleaned = [p for p in cleaned if p]
+    if not cleaned:
+        cleaned = ["untitled.md"]                     <span class="cmt"># 空输入兜底</span>
+    if not cleaned[-1].endswith(".md"):
+        cleaned[-1] += ".md"
+    return "/".join(cleaned)
+
 def write_page(rel: str, content: str) -> Path:
-    path = WIKI_DIR / rel
+    base = WIKI_DIR.resolve()
+    path = (base / safe_rel_path(rel)).resolve()
+    <span class="cmt"># 安全校验：解析后的路径必须仍在 wiki 内，否则拒绝写入</span>
+    if path != base and base not in path.parents:
+        raise ValueError(f"拒绝写出 wiki 目录之外: {rel!r}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
@@ -502,7 +604,7 @@ def append_log(entry: str) -> None:
               <p class="rule-label">tools/ingest.py · 最小写入链路</p>
               <pre class="code"><code>import sys, json
 from pathlib import Path
-from tools._utils import (RAW_DIR, INDEX, SCHEMA_FILE, call_llm,
+from tools._utils import (RAW_DIR, WIKI_DIR, INDEX, SCHEMA_FILE, call_llm,
                           write_page, append_index, append_log)
 
 PROMPT = """你在维护一个 Markdown 知识库。
@@ -521,17 +623,21 @@ def main(raw_path: str) -> None:
     schema = SCHEMA_FILE.read_text(encoding="utf-8")
     index = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
     out = parse_json(call_llm(PROMPT,
-        f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}"))
-    <span class="cmt"># 写源页面，收集 (分类, 标题, 路径) 供更新索引</span>
-    written = [("sources", out["title"], out["source_page"]["path"])]
+        f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}",
+        json_mode=True))   <span class="cmt"># ingest 需结构化 JSON；query 不能传</span>
+    <span class="cmt"># 写页面时用 write_page 的返回值收 (分类, 标题, 相对路径)：
+    # 索引必须存 WIKI_DIR 相对路径，query 才能用 WIKI_DIR / p 打开</span>
+    page = write_page(out["source_page"]["path"], out["source_page"]["content"])
+    written = [("sources", out["title"], page.relative_to(WIKI_DIR).as_posix())]
     for p in out["entity_pages"]:
-        written.append(("entities", Path(p["path"]).stem, p["path"]))
+        page = write_page(p["path"], p["content"])
+        written.append(("entities", Path(p["path"]).stem,
+                        page.relative_to(WIKI_DIR).as_posix()))
     for p in out["concept_pages"]:
-        written.append(("concepts", Path(p["path"]).stem, p["path"]))
-    write_page(out["source_page"]["path"], out["source_page"]["content"])
-    for p in out["entity_pages"] + out["concept_pages"]:
-        write_page(p["path"], p["content"])
-    <span class="cmt"># 关键：不更新 index.md，query 将永远召回不到页面</span>
+        page = write_page(p["path"], p["content"])
+        written.append(("concepts", Path(p["path"]).stem,
+                        page.relative_to(WIKI_DIR).as_posix()))
+    <span class="cmt"># 关键：更新 index.md，否则 query 永远召回不到页面</span>
     append_index(written)
     append_log(out.get("log_entry") or f"ingest {out['title']}")
     print("ingested:", out["title"])
@@ -570,15 +676,75 @@ if __name__ == "__main__":
             </div>
           </div>
         </div>
+
+        <div class="example" data-od-id="example-m0">
+          <div class="example-head">
+            <span class="lbl">示例走查 · M0</span>
+            <span class="flow">输入 → 输出 → 结果展示</span>
+          </div>
+          <div class="example-body">
+            <div class="grid-2">
+              <div>
+                <p class="example-k">输入</p>
+                <pre class="code"><code>$ cat raw/rag-basics.md
+# 检索增强生成
+
+RAG 在生成前先检索外部文档，缓解大模型的幻觉
+与知识过时问题。核心组件：Embedding 模型、
+向量数据库、重排序器。</code></pre>
+              </div>
+              <div>
+                <p class="example-k">输出</p>
+                <pre class="code"><code><span class="cmt">// LLM 返回的结构化 JSON（节选）</span>
+{
+  "title": "检索增强生成",
+  "source_page": { "path": "sources/rag-basics.md" },
+  "concept_pages": [
+    { "path": "concepts/retrieval-augmented-generation.md" },
+    { "path": "concepts/vector-database.md" }
+  ],
+  "entity_pages": [
+    { "path": "entities/openai.md" }
+  ],
+  "log_entry": "ingest 检索增强生成"
+}</code></pre>
+              </div>
+            </div>
+            <div class="example-result">
+              <p class="example-k">结果展示</p>
+              <pre class="code"><code>$ python -m tools.ingest rag-basics.md
+ingested: 检索增强生成
+
+wiki/
+├── sources/rag-basics.md
+├── concepts/retrieval-augmented-generation.md
+├── concepts/vector-database.md
+├── entities/openai.md
+├── index.md        <span class="cmt"># 自动追加 4 条条目</span>
+└── log.md          <span class="cmt"># 前插 1 条带时间戳记录</span>
+
+$ python -m tools.query "RAG 解决什么问题"
+RAG 通过先检索外部文档、再交由模型生成，
+缓解了大模型的幻觉与知识过时问题。
+[[检索增强生成]]</code></pre>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="section" id="milestones" data-od-id="milestones">
       <div class="container stack" style="gap: 40px;">
-        <div style="max-width: 52ch;">
-          <p class="eyebrow">Milestone Roadmap · M1–M7</p>
-          <h2>逐步加功能，直到完整</h2>
-          <p class="lead" style="margin-top: 16px;">M0 已在上方完整展开。下面每个里程碑都按「实现内容与功能 / 如何实现 / 代码 / 验收」四段给出，代码均为讲清思路的教学简化版（非官方源码），命名与仓库一致。</p>
+        <div style="max-width: 60ch;">
+          <p class="eyebrow">Roadmap · 最小实现 → 完整系统</p>
+          <h2>一条最小闭环，七步长成完整系统</h2>
+          <p class="lead" style="margin-top: 16px;">按真实仓库的模块边界重新划分：<strong>M0 是最小可实现闭环</strong>（<code>_utils.py</code> + <code>ingest.py</code> + <code>query.py</code>），先让「文档进、知识出、能问答」跑通；<strong>M1–M7 依次补齐仓库里其余的工具</strong>，每步正好对应一两个文件，都能独立验收。每步先给出<strong>数据契约</strong>（输入形式 → 输出形式 → 数据案例），再展开「实现内容与功能 / 如何实现 / 代码 / 验收」，末尾附一次「输入 → 输出 → 结果展示」的完整走查。代码均为讲清思路的教学简化版（非官方源码），命名与仓库一致。</p>
+          <div class="contract" style="margin-top: 20px;">
+            <div class="ck">最小实现</div>
+            <div class="cv"><strong>M0</strong> · 一个文档进、wiki 页面出、能带引用问答 —— 跑通即毕业</div>
+            <div class="ck">完整实现</div>
+            <div class="cv"><strong>M0 + M1–M7</strong> · 校验、体检、图谱、质检、自愈、增量、自动化，对齐仓库全部工具</div>
+          </div>
         </div>
 
         <div>
@@ -591,71 +757,188 @@ if __name__ == "__main__":
               </div>
               <span class="pill">难度 · 中</span>
             </div>
+            <div class="contract" data-od-id="contract-m1">
+              <div class="ck">输入形式</div>
+              <div class="cv"><code>raw/&lt;path&gt;.md</code>、<code>CLAUDE.md</code>、<code>wiki/index.md</code> → <strong><code>str</code></strong>（索引可为空串）；LLM 响应 → 原始 <strong><code>str</code></strong>（可能带代码围栏或前后闲话）</div>
+              <div class="ck">输出形式</div>
+              <div class="cv"><code>parse_json_from_response → dict</code>；<code>validate_links → list[str]</code>（空列表 = 通过）；通过才落盘 <code>wiki/*.md</code> + <code>index.md</code> + <code>log.md</code>，失败则<strong>零改动</strong></div>
+              <div class="ck">数据案例</div>
+              <div class="cv">LLM 文本 <code>```json {"pages":[…] }```</code> → <code>{"pages":[…]}</code>；<code>[[NotExist]]</code> → <code>["断链：sources/rag-basics.md → [[NotExist]]"]</code></div>
+            </div>
             <div class="grid-2">
+              <div>
+                <p class="rule-label">输入</p>
+                <ul class="ticks">
+                  <li><code>raw/&lt;path&gt;.md</code> —— 待编译的源文档正文</li>
+                  <li><code>CLAUDE.md</code>（<code>SCHEMA_FILE</code>）—— 页面格式、frontmatter 与 <code>[[wikilink]]</code> 规范，拼进 prompt 约束模型</li>
+                  <li><code>wiki/index.md</code> —— 现有索引，随 prompt 一并传入（不存在时按空串处理），让模型复用已有页面名而不是另造新词</li>
+                  <li>LLM 返回的一段<strong>原始文本</strong>——理论上是 JSON，实际可能带 <code>```json</code> 代码围栏或前后闲话</li>
+                </ul>
+                <p class="rule-label" style="margin-top: var(--gap-lg);">输出</p>
+                <ul class="ticks">
+                  <li><strong>成功</strong>：<code>wiki/{sources,entities,concepts}/*.md</code> 页面、可选 <code>overview.md</code>；<code>index.md</code> 追加条目（含 <code>## Overview</code> 分区）、<code>log.md</code> 前插本次记录</li>
+                  <li><strong>失败（断链）</strong>：打印每条断链后 <code>return</code>，磁盘<strong>零改动</strong></li>
+                </ul>
+              </div>
+              <div>
+                <p class="rule-label">方法作用</p>
+                <ul class="ticks">
+                  <li><code>parse_json_from_response(text) → dict</code>：把 LLM 原始文本洗成可用的 dict。先用正则剥掉开头/结尾的 <code>```</code> 围栏（兼容单行围栏，避免 <code>split</code> 越界），再截取首个 <code>{</code> 到末个 <code>}</code> 之间的内容交给 <code>json.loads</code>；找不到花括号则抛 <code>ValueError</code>。</li>
+                  <li><code>validate_links(out, index) → list[str]</code>：写入前的断链闸门。先构造合法目标集合 —— 本次所有页面的标题、文件名 stem、<code>.md</code> 全名，外加从 <code>index.md</code> 正则提取的已有页面；再遍历每个页面内容里的 <code>[[链接]]</code>（<code>[[A|别名]]</code> 只取 <code>A</code>），凡不在目标集内即记一条错误。返回空列表代表校验通过。</li>
+                  <li><code>main(raw_path) → None</code>：串起整条流程的编排器 —— 读源文档 / Schema / 索引 → 调 LLM → 解析 JSON → <strong>先校验</strong> → 校验通过才逐个 <code>write_page</code> → 追加 <code>append_index</code> / <code>append_log</code>。</li>
+                </ul>
+              </div>
+            </div>
+            <div class="grid-2" style="margin-top: var(--gap-lg);">
               <div>
                 <p class="rule-label">实现内容与功能</p>
                 <ul class="ticks">
                   <li>把 <code>CLAUDE.md</code> 注入 prompt，让 LLM 按固定 frontmatter 与 <code>[[wikilink]]</code> 规范输出</li>
-                  <li><strong>容错解析</strong>：自动剥离 ```json 代码围栏，再截取第一个 <code>{</code> 到最后一个 <code>}</code></li>
-                   <li><strong>写入前校验</strong>：检查断链——所有 <code>[[链接]]</code> 必须能在「本次新页面 + <code>index.md</code> 已有页面」里找到目标</li>
-                   <li>更新 <code>overview.md</code>；<code>log.md</code> 记录已由 M0 的 <code>append_log</code> 负责</li>
+                  <li><strong>容错解析</strong>：剥离 ```json 代码围栏（正则兼容单行围栏），再截取第一个 <code>{</code> 到最后一个 <code>}</code></li>
+                  <li><strong>写入前校验</strong>：检查断链——所有 <code>[[链接]]</code> 必须能在「本次新页面 + <code>index.md</code> 已有页面」里找到目标；支持 <code>[[A|别名]]</code> 语法</li>
+                  <li><strong>路径归一</strong>：校验与写盘共用 M0 已定义的 <code>safe_rel_path</code>，避免「校验通过却写成断链」</li>
+                  <li>写入 <code>overview.md</code> 并登记进 <code>index.md</code> 的 <code>## Overview</code> 分区；<code>log.md</code> 仍由 <code>append_log</code> 写入</li>
+                  <li>prompt 字段补上 <code>overview_update</code>，并以 <code>out.get()</code> 兜底，缺字段不再 <code>KeyError</code></li>
                 </ul>
               </div>
               <div>
                 <p class="rule-label">如何实现</p>
-                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">解析与校验是「防幻觉」的两道闸门：解析保证结构化，校验保证引用闭合。任何一条坏写入都会污染整个索引，所以宁可中止，也不要半成品落盘。</p>
+                <p style="margin: 0 0 16px; color: var(--muted); font-size: 15px;">解析与校验是「防幻觉」的两道闸门：解析保证拿到结构化数据，校验保证引用闭合。任何一条坏写入都会污染整个索引，所以顺序是「先全部校验、再统一写盘」——校验失败在第一步就中止，此时还没碰过磁盘，不会留下半成品。</p>
                 <p class="rule-label">验收标准</p>
-                <p style="margin: 0; color: var(--muted); font-size: 15px;">故意让输出包含一个不存在的 <code>[[NotExist]]</code>，ingest 应报出断链并拒绝写入。</p>
+                <p style="margin: 0; color: var(--muted); font-size: 15px;">故意让输出包含一个不存在的 <code>[[NotExist]]</code>，ingest 应打印断链并拒绝写入，且 <code>wiki/</code> 无任何新文件。</p>
               </div>
             </div>
             <div class="code-block">
               <p class="rule-label">代码 · tools/_utils.py（追加）</p>
-              <pre class="code"><code><span class="cmt"># 容错 JSON 解析：剥离代码围栏 + 截取花括号范围</span>
-def parse_json_from_response(text: str) -> dict:
+              <pre class="code"><code><span class="cmt"># 路径归一 safe_rel_path 与 write_page 已在 M0 定义，这里不重复实现。
+# 容错 JSON 解析：先剥离代码围栏（兼容 ```json 与单行围栏），
+# 再用 raw_decode 从第一个 { 起解析——模型在 JSON 后追加说明也不会抛 Extra data。</span>
+def parse_json_from_response(text: str) -&gt; dict:
     text = text.strip()
     if text.startswith("```"):
-        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
+        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)   <span class="cmt"># 去开头围栏</span>
+        text = re.sub(r"\s*```$", "", text)            <span class="cmt"># 去结尾围栏</span>
+    start = text.find("{")
+    if start == -1:
         raise ValueError("响应里找不到 JSON")
-    return json.loads(text[start:end + 1])</code></pre>
+    obj, _ = json.JSONDecoder().raw_decode(text[start:])   <span class="cmt"># 只解析第一个完整对象</span>
+    return obj
+
+<span class="cmt"># 与 Schema 的 Index 格式对齐：overview.md 单独占一个分区</span>
+INDEX_SECTIONS = (("overview", "## Overview"),) + INDEX_SECTIONS</code></pre>
             </div>
             <div class="code-block">
               <p class="rule-label">代码 · tools/ingest.py（写入前校验）</p>
-              <pre class="code"><code><span class="cmt"># 写入前拦截断链：新页面标题 + index 已有标题一起作为合法目标</span>
-def validate_links(out: dict, index: str) -> list[str]:
+              <pre class="code"><code><span class="cmt"># M1 追加依赖：extract_wikilinks / parse_json_from_response；
+# safe_rel_path 与 write_page 沿用 M0 定义，这里只导入、不重复实现。
+# 同时删掉 M0 里那个脆弱的本地 parse_json，统一改用 parse_json_from_response。
+# 补 import re（validate_links 用 re.findall）与 Path。</span>
+import sys, re
+from pathlib import Path
+from tools._utils import (RAW_DIR, WIKI_DIR, INDEX, SCHEMA_FILE, call_llm,
+                          write_page, append_index, append_log,
+                          extract_wikilinks, safe_rel_path, parse_json_from_response)
+
+<span class="cmt"># PROMPT 在 M0 基础上补 overview_update，否则 out["overview_update"] 会 KeyError</span>
+PROMPT = """你在维护一个 Markdown 知识库。
+严格返回一个 JSON 对象，不要解释、不要代码围栏。
+字段：title, source_page, entity_pages[], concept_pages[], overview_update, log_entry
+每个页面形如 {path, content}，content 用 [[wikilink]] 互链。"""
+
+<span class="cmt"># 写入前拦截断链：目标集 = 本次新页面标题/文件名 + index 已有页面。
+# source 页文件名是 kebab-case 而标题是 Source Title，故标题也收；
+# 同时收 stem 与 .md 全名，兼容 [[x]] 和 [[x.md]]；[[A|别名]] 只比较 A。</span>
+def validate_links(out: dict, index: str) -&gt; list[str]:
     errors = []
     pages = [out["source_page"], *out["entity_pages"], *out["concept_pages"]]
-    titles = {Path(p["path"]).stem for p in pages}
-    titles |= {Path(m).stem for m in re.findall(r"\]\(([^)]+\.md)\)", index)}
+    titles = {out["title"]}                          <span class="cmt"># 源页标题（kebab 文件名的原形）</span>
     for p in pages:
-        for link in extract_wikilinks(p["content"]):
-            if link not in titles:
-                errors.append(f"断链：{p['path']} → [[{link}]]")
+        rel = safe_rel_path(p["path"])
+        titles.add(Path(rel).stem)
+        titles.add(Path(rel).name)
+    <span class="cmt"># index 行是 "- [显示标题](路径.md)"：标题与路径 stem 都要收。
+    # 只收 stem 会漏掉中文标题（源页是 kebab 文件名），
+    # 于是 [[检索增强生成]] 链到已存在的源页会被误判为断链。</span>
+    for title, path in re.findall(r"- \[(.+?)\]\(([^)]+\.md)\)", index):
+        titles.add(title)
+        titles.add(Path(safe_rel_path(path)).stem)
+    for p in pages:
+        for raw in extract_wikilinks(p["content"]):
+            target = raw.split("|", 1)[0].strip()      <span class="cmt"># [[A|别名]] 取 A</span>
+            if target not in titles:
+                errors.append(f"断链：{p['path']} → [[{raw}]]")
     return errors
 
-def main(raw_path: str) -> None:
+def main(raw_path: str) -&gt; None:
     raw = (RAW_DIR / raw_path).read_text(encoding="utf-8")
     schema = SCHEMA_FILE.read_text(encoding="utf-8")
     index = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
     out = parse_json_from_response(call_llm(PROMPT,
-        f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}"))
+        f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}",
+        json_mode=True))   <span class="cmt"># ingest 需结构化 JSON</span>
+
+    <span class="cmt"># 第一步就拦断链：不通过直接 return，此时尚未碰过磁盘</span>
     if (errors := validate_links(out, index)):
         print("校验失败，中止写入：")
         for e in errors:
             print("  -", e)
         return
-    written = [("sources", out["title"], out["source_page"]["path"])]
+
+    <span class="cmt"># 校验全过才开始写盘；用 write_page 返回值收 WIKI_DIR 相对路径</span>
+    page = write_page(out["source_page"]["path"], out["source_page"]["content"])
+    written = [("sources", out["title"], page.relative_to(WIKI_DIR).as_posix())]
     for p in out["entity_pages"]:
-        written.append(("entities", Path(p["path"]).stem, p["path"]))
+        page = write_page(p["path"], p["content"])
+        written.append(("entities", Path(p["path"]).stem,
+                        page.relative_to(WIKI_DIR).as_posix()))
     for p in out["concept_pages"]:
-        written.append(("concepts", Path(p["path"]).stem, p["path"]))
-    write_page(out["source_page"]["path"], out["source_page"]["content"])
-    for p in out["entity_pages"] + out["concept_pages"]:
-        write_page(p["path"], p["content"])
-    write_page("overview.md", out["overview_update"])
+        page = write_page(p["path"], p["content"])
+        written.append(("concepts", Path(p["path"]).stem,
+                        page.relative_to(WIKI_DIR).as_posix()))
+    if (overview := out.get("overview_update")):       <span class="cmt"># 缺字段也不崩</span>
+        <span class="cmt"># 模型可能把它写成 {path, content} 对象；write_page 只收 str，先取出正文</span>
+        text = overview.get("content") if isinstance(overview, dict) else overview
+        write_page("overview.md", text)
+        written.append(("overview", "Overview", "overview.md"))
     append_index(written)  <span class="cmt"># 校验通过后再更新索引与日志</span>
     append_log(out.get("log_entry") or f"ingest {out['title']}")</code></pre>
+            </div>
+            <div class="example" data-od-id="example-m1">
+              <div class="example-head">
+                <span class="lbl">示例走查 · M1</span>
+                <span class="flow">输入 → 输出 → 结果展示</span>
+              </div>
+              <div class="example-body">
+                <div class="grid-2">
+                  <div>
+                    <p class="example-k">输入</p>
+                    <pre class="code"><code><span class="cmt">// 模型返回的 JSON，正文里带一条断链</span>
+{
+  "source_page": {
+    "path": "sources/rag-basics.md",
+    "content": "…参见 [[NotExist]]，另见 [[检索增强生成]]。"
+  },
+  …
+}</code></pre>
+                  </div>
+                  <div>
+                    <p class="example-k">输出</p>
+                    <pre class="code"><code>校验失败，中止写入：
+  - 断链：sources/rag-basics.md → [[NotExist]]
+
+<span class="cmt">// 因为 validate_links 在写盘之前执行</span></code></pre>
+                  </div>
+                </div>
+                <div class="example-result">
+                  <p class="example-k">结果展示</p>
+                  <pre class="code"><code>$ python -m tools.ingest rag-basics.md
+校验失败，中止写入：
+  - 断链：sources/rag-basics.md → [[NotExist]]
+
+$ git status --short wiki/
+<span class="cmt"># 无输出：磁盘零改动，未写任何页面 / 索引 / 日志</span></code></pre>
+                </div>
+              </div>
             </div>
           </article>
 
@@ -667,6 +950,14 @@ def main(raw_path: str) -> None:
                 <p class="meta">改动 · 新增 tools/health.py</p>
               </div>
               <span class="pill">难度 · 低</span>
+            </div>
+            <div class="contract" data-od-id="contract-m2">
+              <div class="ck">输入形式</div>
+              <div class="cv"><code>wiki/</code> 目录 → <code>rglob("*.md")</code> 得全部页面路径；<code>index.md</code>、<code>log.md</code> → <strong><code>str</code></strong>（不看正文语义，只看结构）</div>
+              <div class="ck">输出形式</div>
+              <div class="cv">单个 <strong><code>dict</code></strong> 四键报告 <code>{stubs, unindexed, missing_files, untracked}</code>；<code>--json</code> 打印 / <code>--save</code> 落盘</div>
+              <div class="ck">数据案例</div>
+              <div class="cv"><code>{"stubs":["sources/empty.md"], "unindexed":["concepts/vector-database.md"], "missing_files":["concepts/retrieval-augmented-generation.md"], "untracked":["rag-basics"]}</code></div>
             </div>
             <div class="grid-2">
               <div>
@@ -696,7 +987,7 @@ def stub_pages() -> list[str]:
     for p in WIKI_DIR.rglob("*.md"):
         body = re.sub(r"^---.*?---", "", p.read_text(encoding="utf-8"), flags=re.S).strip()
         if len(body) &lt; 40:                       <span class="cmt"># 除 frontmatter 外几乎没内容</span>
-            bad.append(str(p.relative_to(WIKI_DIR)))
+            bad.append(p.relative_to(WIKI_DIR).as_posix())
     return bad
 
 def index_mismatch() -> tuple[list, list]:
@@ -727,6 +1018,51 @@ def main(as_json: bool) -> None:
 if __name__ == "__main__":
     main("--json" in sys.argv)</code></pre>
             </div>
+            <div class="example" data-od-id="example-m2">
+              <div class="example-head">
+                <span class="lbl">示例走查 · M2</span>
+                <span class="flow">输入 → 输出 → 结果展示</span>
+              </div>
+              <div class="example-body">
+                <div class="grid-2">
+                  <div>
+                    <p class="example-k">输入</p>
+                    <pre class="code"><code><span class="cmt"># wiki/ 人为制造四类结构问题</span>
+- sources/empty.md           正文为空壳
+- concepts/vector-database.md   在磁盘上，
+                             但 index.md 未收录
+- index.md 收录 retrieval-augmented-
+  generation.md，但该文件已删除
+- sources/rag-basics.md      存在，但 log.md
+                             没有对应 ingest 记录</code></pre>
+                  </div>
+                  <div>
+                    <p class="example-k">输出</p>
+                    <pre class="code"><code>{
+  "stubs": ["sources/empty.md"],
+  "unindexed": ["concepts/vector-database.md"],
+  "missing_files":
+    ["concepts/retrieval-augmented-generation.md"],
+  "untracked": ["rag-basics"]
+}</code></pre>
+                  </div>
+                </div>
+                <div class="example-result">
+                  <p class="example-k">结果展示</p>
+                  <pre class="code"><code>$ python tools/health.py
+stubs: 1
+  - sources/empty.md
+unindexed: 1
+  - concepts/vector-database.md
+missing_files: 1
+  - concepts/retrieval-augmented-generation.md
+untracked: 1
+  - rag-basics
+
+<span class="cmt"># 加 --json 得到机器可读报告；加 --save 落盘到 wiki/health-report.md</span></code></pre>
+                </div>
+              </div>
+            </div>
           </article>
 
           <article class="milestone" data-od-id="milestone-m3">
@@ -737,6 +1073,14 @@ if __name__ == "__main__":
                 <p class="meta">改动 · 新增 tools/build_graph.py · 产出 graph/graph.json + graph.html</p>
               </div>
               <span class="pill">难度 · 中</span>
+            </div>
+            <div class="contract" data-od-id="contract-m3">
+              <div class="ck">输入形式</div>
+              <div class="cv">所有 wiki 页面正文 → <strong><code>str</code></strong>（逐页 <code>extract_wikilinks</code> 取正文里的 <code>[[…]]</code>）</div>
+              <div class="ck">输出形式</div>
+              <div class="cv"><code>graph/graph.json</code> = <code>{nodes:[{id,path}], edges:[{source,target,type,confidence}]}</code>；外加交互式 <code>graph.html</code></div>
+              <div class="ck">数据案例</div>
+              <div class="cv">页面 <code>sources/rag-basics.md</code> 中的 <code>[[检索增强生成]]</code> → <code>{"source":"sources/rag-basics","target":"检索增强生成","type":"EXTRACTED","confidence":1.0}</code></div>
             </div>
             <div class="grid-2">
               <div>
@@ -795,6 +1139,49 @@ def render(nodes: dict, edges: list, out_dir) -> None:
                    ensure_ascii=False, indent=2), encoding="utf-8")</code></pre>
               <p class="meta" style="margin-top: 12px;">注意：vis.js 从 CDN 加载，离线会白屏——这是仓库里已知的坑，建议把脚本本地化。</p>
             </div>
+            <div class="example" data-od-id="example-m3">
+              <div class="example-head">
+                <span class="lbl">示例走查 · M3</span>
+                <span class="flow">输入 → 输出 → 结果展示</span>
+              </div>
+              <div class="example-body">
+                <div class="grid-2">
+                  <div>
+                    <p class="example-k">输入</p>
+                    <pre class="code"><code><span class="cmt"># 页面里的 wikilink（确定性解析，无需 LLM）</span>
+sources/rag-basics.md
+    → [[检索增强生成]]  [[向量数据库]]
+concepts/vector-database.md
+    → [[检索增强生成]]  [[Embedding]]</code></pre>
+                  </div>
+                  <div>
+                    <p class="example-k">输出</p>
+                    <pre class="code"><code><span class="cmt">// graph.json（节选）</span>
+{
+  "nodes": [
+    { "id": "sources/rag-basics",
+      "path": "sources/rag-basics.md" }
+  ],
+  "edges": [
+    { "source": "sources/rag-basics",
+      "target": "检索增强生成",
+      "type": "EXTRACTED",
+      "confidence": 1.0 }
+  ]
+}</code></pre>
+                  </div>
+                </div>
+                <div class="example-result">
+                  <p class="example-k">结果展示</p>
+                  <pre class="code"><code>$ python tools/build_graph.py
+nodes: 12    edges: 18
+→ graph/graph.json
+→ graph/graph.html      <span class="cmt"># 浏览器打开可拖拽、缩放</span>
+
+<span class="cmt"># 删掉一个页面后重跑，指向它的链接不会生成幽灵节点</span></code></pre>
+                </div>
+              </div>
+            </div>
           </article>
 
           <article class="milestone" data-od-id="milestone-m4">
@@ -805,6 +1192,14 @@ def render(nodes: dict, edges: list, out_dir) -> None:
                 <p class="meta">改动 · tools/build_graph.py</p>
               </div>
               <span class="pill">难度 · 高</span>
+            </div>
+            <div class="contract" data-od-id="contract-m4">
+              <div class="ck">输入形式</div>
+              <div class="cv">上一轮的节点表 + 每页<strong>前 2000 字符</strong> + 候选节点名（喂给 LLM 推断）；<code>.graph-cache.json</code>（<code>SHA256 → 边</code>）与 <code>.graph-checkpoint.jsonl</code>（断点续跑）</div>
+              <div class="ck">输出形式</div>
+              <div class="cv">带 <code>INFERRED</code> 类型的边（仅 <code>confidence ≥ 0.7</code> 才采纳）；每个节点新增 <code>community: int</code> 字段（Louvain 社区编号）</div>
+              <div class="ck">数据案例</div>
+              <div class="cv"><code>{"source":"sources/rag-basics","target":"向量数据库","type":"INFERRED","confidence":0.82}</code>；页面未改时重跑命中缓存 → <strong>0 次 LLM 调用</strong></div>
             </div>
             <div class="grid-2">
               <div>
@@ -874,6 +1269,47 @@ def save_checkpoint(path, key: str, edges: list) -&gt; None:
         f.write(json.dumps({"key": key, "edges": edges},
                            ensure_ascii=False) + "\n")</code></pre>
             </div>
+            <div class="example" data-od-id="example-m4">
+              <div class="example-head">
+                <span class="lbl">示例走查 · M4</span>
+                <span class="flow">输入 → 输出 → 结果展示</span>
+              </div>
+              <div class="example-body">
+                <div class="grid-2">
+                  <div>
+                    <p class="example-k">输入</p>
+                    <pre class="code"><code><span class="cmt"># 每页正文前 2000 字符 + 全部候选节点名</span>
+cache: .graph-cache.json        <span class="cmt"># SHA256 → 边</span>
+checkpoint: .graph-checkpoint.jsonl
+<span class="cmt"># 阈值：confidence ≥ 0.7 才采纳</span></code></pre>
+                  </div>
+                  <div>
+                    <p class="example-k">输出</p>
+                    <pre class="code"><code><span class="cmt">// 新增的推断边 + 社区编号</span>
+{ "source": "sources/rag-basics",
+  "target": "向量数据库",
+  "type": "INFERRED",
+  "confidence": 0.82 }
+
+节点新增字段："community": 1
+<span class="cmt">// 低于 0.7 的猜测被直接丢弃</span></code></pre>
+                  </div>
+                </div>
+                <div class="example-result">
+                  <p class="example-k">结果展示</p>
+                  <pre class="code"><code>$ python tools/build_graph.py
+Pass1: 18 EXTRACTED 边
+Pass2: 推断 7 条，采纳 4 条（confidence ≥ 0.7）
+Louvain: 3 个社区
+
+$ python tools/build_graph.py     <span class="cmt"># 内容未改，再跑一次</span>
+Pass2: 缓存命中 12 / 新推断 0     <span class="cmt"># 0 次 LLM 调用</span>
+
+$ python tools/build_graph.py     <span class="cmt"># 中断后重跑</span>
+从 .graph-checkpoint.jsonl 恢复，已完成的页跳过</code></pre>
+                </div>
+              </div>
+            </div>
           </article>
 
           <article class="milestone" data-od-id="milestone-m5">
@@ -884,6 +1320,14 @@ def save_checkpoint(path, key: str, edges: list) -&gt; None:
                 <p class="meta">改动 · 新增 tools/lint.py · tools/heal.py</p>
               </div>
               <span class="pill">难度 · 高</span>
+            </div>
+            <div class="contract" data-od-id="contract-m5">
+              <div class="ck">输入形式</div>
+              <div class="cv"><code>wiki/</code> 全量页面（统计入链 / 断链 / 被提及次数）；每页正文抽样（各约 1500 字符）交给 LLM 做语义判断</div>
+              <div class="ck">输出形式</div>
+              <div class="cv"><code>lint</code> → 结构报告 <code>{orphans, broken, missing_entities}</code> + LLM 语义清单；<code>heal</code> → 为缺失实体生成 <code>wiki/entities/*.md</code></div>
+              <div class="ck">数据案例</div>
+              <div class="cv"><code>missing_entities: ["向量数据库"]</code> → 生成 <code>wiki/entities/向量数据库.md</code>；恶意路径 <code>../../etc/passwd</code> 被 <code>safe_path</code> 拦回</div>
             </div>
             <div class="grid-2">
               <div>
@@ -956,6 +1400,47 @@ def heal(missing: list[str]) -&gt; None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(out["content"], encoding="utf-8")</code></pre>
             </div>
+            <div class="example" data-od-id="example-m5">
+              <div class="example-head">
+                <span class="lbl">示例走查 · M5</span>
+                <span class="flow">输入 → 输出 → 结果展示</span>
+              </div>
+              <div class="example-body">
+                <div class="grid-2">
+                  <div>
+                    <p class="example-k">输入</p>
+                    <pre class="code"><code><span class="cmt"># wiki/ 现状</span>
+- [[向量数据库]] 被 3 个页面提及，
+  但没有独立页面
+- entities/orphan.md 无任何入链
+- 某页存在断链 [[旧名称]]</code></pre>
+                  </div>
+                  <div>
+                    <p class="example-k">输出</p>
+                    <pre class="code"><code><span class="cmt"># 结构层（零 LLM）</span>
+orphans:  ["orphan"]
+broken:   ["旧名称"]
+missing_entities: ["向量数据库"]  <span class="cmt"># 被 ≥3 页提及</span>
+
+<span class="cmt"># 语义层（LLM）：跨页矛盾 / 过时摘要 / 数据缺口清单</span></code></pre>
+                  </div>
+                </div>
+                <div class="example-result">
+                  <p class="example-k">结果展示</p>
+                  <pre class="code"><code>$ python tools/lint.py
+orphans: 1
+broken: 1
+missing_entities: 1   → 向量数据库
+
+$ python tools/heal.py
+gather_mentions("向量数据库")：命中 3 处
+✓ 生成 wiki/entities/向量数据库.md
+
+$ ls wiki/entities/
+openai.md  向量数据库.md</code></pre>
+                </div>
+              </div>
+            </div>
           </article>
 
           <article class="milestone" data-od-id="milestone-m6">
@@ -966,6 +1451,14 @@ def heal(missing: list[str]) -&gt; None:
                 <p class="meta">改动 · 新增 tools/refresh.py · tools/file_to_md.py · tools/pdf2md.py</p>
               </div>
               <span class="pill">难度 · 中</span>
+            </div>
+            <div class="contract" data-od-id="contract-m6">
+              <div class="ck">输入形式</div>
+              <div class="cv"><code>raw/</code> 目录（PDF / DOCX / PPTX / EPUB / MD 混排）；<code>.refresh-cache.json</code>（<code>路径 → SHA256</code> 指纹）</div>
+              <div class="ck">输出形式</div>
+              <div class="cv"><code>docs/raw-md/*.md</code>（格式转换产物）；仅对指纹变化的文件调用 <code>ingest.py</code>，其余跳过</div>
+              <div class="ck">数据案例</div>
+              <div class="cv"><code>raw/vector-search.docx</code> → <code>docs/raw-md/vector-search.md</code>；二次 <code>refresh</code> 指纹全同 → <strong>0 次重编译</strong></div>
             </div>
             <div class="grid-2">
               <div>
@@ -1033,6 +1526,49 @@ def pdf_to_md(path: str, backend: str = "auto") -&gt; str:
     import pymupdf4llm
     return pymupdf4llm.to_markdown(path)</code></pre>
             </div>
+            <div class="example" data-od-id="example-m6">
+              <div class="example-head">
+                <span class="lbl">示例走查 · M6</span>
+                <span class="flow">输入 → 输出 → 结果展示</span>
+              </div>
+              <div class="example-body">
+                <div class="grid-2">
+                  <div>
+                    <p class="example-k">输入</p>
+                    <pre class="code"><code>raw/
+├── rag-basics.md
+├── attention.md
+└── vector-search.docx   <span class="cmt"># 需先转 Markdown</span>
+.refresh-cache.json      <span class="cmt"># 上次的 SHA256 指纹</span></code></pre>
+                  </div>
+                  <div>
+                    <p class="example-k">输出</p>
+                    <pre class="code"><code>file_to_md.py
+  → docs/raw-md/vector-search.md  <span class="cmt"># 新转换</span>
+
+refresh.py
+  → 只对指纹变化的文件调用 ingest
+  → 未变文件直接跳过（不烧 token）</code></pre>
+                  </div>
+                </div>
+                <div class="example-result">
+                  <p class="example-k">结果展示</p>
+                  <pre class="code"><code>$ python tools/file_to_md.py raw/ docs/raw-md/
+转换 1 个文件 → docs/raw-md/vector-search.md
+
+$ python tools/refresh.py
+ingest rag-basics.md
+ingest attention.md
+ingest vector-search.md
+
+$ python tools/refresh.py            <span class="cmt"># 什么都没改</span>
+（无输出：0 次 ingest）
+
+$ 修改 attention.md 后再跑
+ingest attention.md                  <span class="cmt"># 仅它被重编译</span></code></pre>
+                </div>
+              </div>
+            </div>
           </article>
 
           <article class="milestone" data-od-id="milestone-m7">
@@ -1043,6 +1579,14 @@ def pdf_to_md(path: str, backend: str = "auto") -&gt; str:
                 <p class="meta">改动 · .claude/commands/*.md · scripts/sync.sh · docs/automated-sync.md</p>
               </div>
               <span class="pill">难度 · 中</span>
+            </div>
+            <div class="contract" data-od-id="contract-m7">
+              <div class="ck">输入形式</div>
+              <div class="cv">斜杠命令的自然语言参数 <strong><code>$ARGUMENTS</code></strong>（如 <code>/wiki-ingest raw/rag-basics.md</code>）；或 cron 定时表达式</div>
+              <div class="ck">输出形式</div>
+              <div class="cv"><code>.sync.log</code> 追加运行行；<code>wiki/log.md</code> 追加一条 sync 记录；进程退出码反映成败</div>
+              <div class="ck">数据案例</div>
+              <div class="cv">cron <code>0 9 * * *</code> 触发 → <code>log.md</code> 新增 <code>[2026-09-15] sync | ingest 2 个变更文件</code></div>
             </div>
             <div class="grid-2">
               <div>
@@ -1079,6 +1623,42 @@ python tools/refresh.py
 python tools/build_graph.py --report</code></pre>
               <pre class="code" style="margin-top: 12px;"><code><span class="cmt"># crontab —— 每天 09:00 同步一次</span>
 0 9 * * * cd /path/to/llm-wiki-agent &amp;&amp; scripts/sync.sh &gt;&gt; .sync.log 2&gt;&amp;1</code></pre>
+            </div>
+            <div class="example" data-od-id="example-m7">
+              <div class="example-head">
+                <span class="lbl">示例走查 · M7</span>
+                <span class="flow">输入 → 输出 → 结果展示</span>
+              </div>
+              <div class="example-body">
+                <div class="grid-2">
+                  <div>
+                    <p class="example-k">输入</p>
+                    <pre class="code"><code><span class="cmt"># 触发方式（任选）</span>
+- 斜杠命令：
+    /wiki-ingest raw/rag-basics.md
+- 定时任务：
+    cron 每天 09:00 执行 scripts/sync.sh</code></pre>
+                  </div>
+                  <div>
+                    <p class="example-k">输出</p>
+                    <pre class="code"><code><span class="cmt"># sync.sh 固定顺序</span>
+health  → refresh  → graph
+
+stdout / stderr 追加到 .sync.log
+本轮结果写入 wiki/log.md</code></pre>
+                  </div>
+                </div>
+                <div class="example-result">
+                  <p class="example-k">结果展示</p>
+                  <pre class="code"><code>$ crontab -l
+0 9 * * * cd /path/to/llm-wiki-agent &amp;&amp; scripts/sync.sh &gt;&gt; .sync.log 2&gt;&amp;1
+
+$ tail -n 4 wiki/log.md
+## 2026-09-15 09:00
+[2026-09-15] sync | ingest 2 个变更文件；
+health 通过；graph 重建（+1 条推断边）</code></pre>
+                </div>
+              </div>
             </div>
           </article>
         </div>

@@ -5,37 +5,51 @@
 # 是整个 M0 最小闭环的写入侧。
 
 import json
+import re
 import sys
 from pathlib import Path
 
-from tools._utils import RAW_DIR, SCHEMA_FILE, INDEX, call_llm, write_page, append_index, append_log, WIKI_DIR
+from tools._utils import RAW_DIR, SCHEMA_FILE, INDEX, call_llm, write_page, append_index, append_log, WIKI_DIR, \
+    parse_json_from_response, safe_rel_path, extract_wikilinks
 
 # 指令模板：告诉模型「只返回 JSON」，并约定字段名与页面结构。
 # 注意字段名是复数 entity_pages / concept_pages，后面解析时要用对。
 PROMPT = """你在维护一个 Markdown 知识库。
 严格返回一个 JSON 对象，不要解释、不要代码围栏。
-字段：title, source_page, entity_pages[], concept_pages[], log_entry
+字段：title, source_page, entity_pages[], concept_pages[], overview_update, log_entry
 每个页面形如 {path, content}，content 用 [[wikilink]] 互链。"""
 
-
-def parse_json(text: str) -> dict:
+def validate_links(out:dict,index:str)->list[str]:
     """
-    把模型返回的文本解析成 dict。
-    模型常把 JSON 包在代码围栏里，形如：
-
-        ```json
-        {"a": 1}
-        ```
-
-    所以先去掉首尾空白；若以 ``` 开头，则去掉第一行围栏和结尾的 ```。
-    :param text: LLM 返回的原始文本
-    :return: 解析后的 dict
+    模型返回的数据中，content字段中有这种对话
+    量子纠缠是一种 [[量子力学]] 现象，最早由 [[爱因斯坦]] 等人提出质疑。
+    量子力学最新的实体页和过去的所有索引中都没有，这就会断链。
+    :param out:
+    :param index:
+    :return:
     """
-    text = text.strip()
-    if text.startswith('```'):
-        # split("\n",1)[1] 取第一行之后的内容；rsplit("```",1)[0] 截掉结尾围栏
-        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
-    return json.loads(text)
+    # 错误列表，断链的信息存放在这里
+    errors=[]
+    # 将现有的数据拍平，最新的页拿出来
+    pages=[out["source_page"],*out["entity_pages"],*out["concept_pages"]]
+    # 将标题也放进去
+    titles={out["title"]}
+
+    for page in pages:
+        rel = safe_rel_path(page["path"])
+        titles.add(Path(rel).stem)
+        titles.add(Path(rel).name)
+    for title,path in re.findall(r"- \[(.+?)\]\(([^)]+\.md)\)",index):
+        titles.add(title)
+        titles.add(Path(safe_rel_path(path)).stem)
+
+    for p in pages:
+        for row in extract_wikilinks(p["content"]):
+            target = row.split("|",1)[0].strip()
+            if target not in titles:
+                errors.append(f"断链：{p['path']} → [[{row}]]")
+    return errors
+
 
 
 def main(raw_path: str) -> None:
@@ -48,10 +62,13 @@ def main(raw_path: str) -> None:
     # 3. 读取现有索引，让模型知道已有哪些页面，避免重复生成、并复用已有 [[wikilink]]
     index = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
 
-    # 4. 调用 LLM 并解析返回的 JSON
-    out = parse_json(call_llm(
+    # 4. 调用 LLM 并解析返回的 JSON。
+    #    json_mode=True：ingest 需要结构化输出，让 DeepSeek 强制返回 JSON 对象。
+    #    （query 要自由文本，不能传这个参数，否则 400。）
+    out = parse_json_from_response(call_llm(
         PROMPT,
-        f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}"
+        f"{schema}\n\n# 现有索引\n{index}\n\n# 源文档\n{raw}",
+        json_mode=True
         )
     )
 
@@ -71,6 +88,13 @@ def main(raw_path: str) -> None:
     #     "log_entry": "..."
     # }
 
+    # 写入之前断链校验
+    if (errors := validate_links(out,index)):
+        print("校验失败，中止写入：")
+        for error in errors:
+            print(" -",error)
+        return
+
     # 5. 写源页面，并收集 (分类, 标题, 相对路径) 供更新索引。
     #    关键：索引里必须存「相对 wiki/ 的路径」，所以用 write_page 的返回值
     #    （它已过 safe_rel_path 规范化）再 relative_to(WIKI_DIR)，而不是直接用模型给的 path。
@@ -86,6 +110,12 @@ def main(raw_path: str) -> None:
     for p in out["concept_pages"]:
         page = write_page(p["path"], p["content"])
         written.append(("concepts", Path(p["path"]).stem, page.relative_to(WIKI_DIR).as_posix()))
+
+    if (overview := out.get("overview_update")):       # 缺字段也不崩
+        # 模型可能把它写成 {path, content} 对象；write_page 只收 str，先取出正文
+        text = overview.get("content") if isinstance(overview, dict) else overview
+        write_page("overview.md", text)
+        written.append(("overview", "Overview", "overview.md"))
 
     # 8. 更新索引与日志：index.md 合并去重，log.md 前插最新条目
     append_index(written)

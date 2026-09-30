@@ -5,6 +5,7 @@
 # 依赖方向是单向的：所有工具 → _utils，_utils 不反向依赖任何工具。
 
 import hashlib
+import json
 import os
 import re
 from datetime import datetime
@@ -35,7 +36,8 @@ INVALID_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 # index.md 的三个分区；query.py 靠 ](path.md) 正则扫描这里召回页面
 INDEX_SECTIONS = (("sources", "## Sources"),
                   ("entities", "## Entities"),
-                  ("concepts", "## Concepts"))
+                  ("concepts", "## Concepts"),
+                  ("overview", "## Overview"))
 
 
 def safe_rel_path(rel: str) -> str:
@@ -74,12 +76,16 @@ def sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def call_llm(system: str, user: str, model: str = MODEL) -> str:
+def call_llm(system: str, user: str, model: str = MODEL, json_mode: bool = False) -> str:
     """
     调用 LLM（经 litellm 统一入口），返回首条回复的文本内容。
     - system：系统提示，负责设定角色与输出约束
     - user：用户内容，通常塞入 schema + 索引 + 源文档
     - model：模型名，默认取环境变量 LLM_MODEL
+    - json_mode：是否要求模型返回 JSON。默认 False。
+      只有需要结构化输出的调用（如 ingest）才传 True；query 要自由文本，必须保持 False，
+      否则 DeepSeek 会因「prompt 中没有 json 字样」直接返回 400。
+      （注意：即使传 True，DeepSeek 也要求 prompt 里出现 "json"，所以 ingest 的 PROMPT 里写了 JSON。）
     """
     kw = {}
     # DeepSeek 需要一些特殊处理：
@@ -91,8 +97,9 @@ def call_llm(system: str, user: str, model: str = MODEL) -> str:
         kw["api_key"] = api_key
         # 固定 api_base，保证打到你验证过的 /chat/completions 端点
         kw["api_base"] = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
-        # 强制返回 JSON，配合 ingest 的结构化解析
-        kw["response_format"] = {"type": "json_object"}
+        # 仅在需要结构化输出时开启 JSON 模式；query 这类自由文本调用不能开
+        if json_mode:
+            kw["response_format"] = {"type": "json_object"}
     resp = completion(
         model=model,
         messages=[
@@ -191,6 +198,20 @@ def append_log(entry: str) -> None:
         # 没有标题：直接把新条目放在最前面
         LOG.write_text(f"{block}\n\n{prev}\n", encoding="utf-8")
 
+def parse_json_from_response(text: str) ->dict:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)   # 去开头围栏
+        text = re.sub(r"\s*```$", "", text)            # 去结尾围栏
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("响应里找不到 JSON")
+    try:
+        # 从text（要解析的字符串）中，start开始的位置，找出第一个字符串，返回一个元组，第一个为json对象，第二个是解析结束的位置
+        obj, _ = json.JSONDecoder().raw_decode(text, start)  # 只取第一个对象
+    except json.JSONDecodeError as e:
+        raise ValueError(f"JSON 解析失败: {e}") from e
+    return obj
 
 if __name__ == "__main__":
     # 遗留的自测代码，保持注释，避免误写垃圾文件到 wiki/
